@@ -99,7 +99,7 @@
     "eslint": "^3.16.1",
     "mocha": "^3.2.0",
     "pre-commit": "^1.2.2",
-    "typescript": "^2.0.3",
+    "typescript": "^2.2.1",
     "vscode": "^1.0.0"
   },
   "dependencies": {
@@ -108,8 +108,7 @@
     "opn": "^4.0.2",
     "q": "^1.4.1",
     "simple-git": "^1.66.0",
-    "ssh-parse": "^1.0.0",
-    "typescript": "^2.2.1"
+    "ssh-parse": "^1.0.0"
   },
   "repository": {
     "type": "git",
