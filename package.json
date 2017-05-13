@@ -78,6 +78,11 @@
           "type": "boolean",
           "default": false,
           "description": "Automatically open a new MR."
+        },
+        "gitlab-mr.removeSourceBranch": {
+          "type": "boolean",
+          "default": false,
+          "description": "Remove source branch after merging."
         }
       }
     }

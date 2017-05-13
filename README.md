@@ -1,6 +1,11 @@
 # VS Code - Gitlab MR
 
-[![](http://vsmarketplacebadge.apphb.com/version/jasonn-porch.gitlab-mr.svg)](https://marketplace.visualstudio.com/items?itemName=jasonn-porch.gitlab-mr)
+[![](http://vsmarketplacebadge.apphb.com/version-short/jasonn-porch.gitlab-mr.svg
+)
+![](http://vsmarketplacebadge.apphb.com/installs-short/jasonn-porch.gitlab-mr.svg
+)
+![](http://vsmarketplacebadge.apphb.com/rating-short/jasonn-porch.gitlab-mr.svg
+)](https://marketplace.visualstudio.com/items?itemName=jasonn-porch.gitlab-mr)
 
 VS Code extension for working with Gitlab Merge Requests, supporting both Gitlab.com and Gitlab EE/CE servers.
 
@@ -52,6 +57,7 @@ View an existing MR in your browser.
 * `gitlab-mr.targetBranch`: Default target branch for MRs (defaults to `master`).
 * `gitlab-mr.targetRemote`: Default target remote for MRs (defaults to `origin`).
 * `gitlab-mr.autoOpenMr`: Automatically open a new MR in your browser.
+* `gitlab-mr.removeSourceBranch`: Set the option to delete the source branch when the MR is merged.
 
 ### Access Tokens Example
 

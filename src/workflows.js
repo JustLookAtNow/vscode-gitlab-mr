@@ -49,6 +49,9 @@ const openMR = () => {
     // Auto-open MR
     const autoOpenMr = preferences.get('autoOpenMr', false);
 
+    // Remove source branch
+    const removeSourceBranch = preferences.get('removeSourceBranch', false);
+
     // Set git context
     const gitContext = gitApi(vscode.workspace.rootPath);
     const git = gitActions(gitContext);
@@ -153,7 +156,7 @@ const openMR = () => {
                         });
 
                         return gitPromises.then(() => {
-                            return gitlab.openMr(repoId, repoHost, branch, targetBranch, commitMessage)
+                            return gitlab.openMr(repoId, repoHost, branch, targetBranch, commitMessage, removeSourceBranch)
                             .then(mr => {
                                 // Success message and prompt
                                 const successMessage = message(`MR !${mr.iid} created.`);

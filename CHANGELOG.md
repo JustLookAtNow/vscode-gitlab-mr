@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.3.0
+
+* Added: `gitlab-mr.removeSourceBranch` to set the source branch to be deleted when the MR is merged.
+
 ## 1.2.1
 
 * Fixed: Improved repo URL parsing when determining whether or not Gitlab API requests for CE/EE servers should use `http` or `https`. The plugin will now use the protocol of the url in `gitlab-mr.accessTokens`, instead of using the protocol of the remote url for the repo (e.g. a repo may use `ssh` for Git but the Gitlab server may be on `http`).
