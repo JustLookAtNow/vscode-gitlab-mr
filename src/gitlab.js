@@ -1,7 +1,11 @@
 const request = require('request-promise');
 const assert = require('assert');
+const vscode = require('vscode');
 
 module.exports = ({ url, token }) => {
+    const preferences = vscode.workspace.getConfiguration('gitlab-mr');
+    const apiVersion = preferences.get('apiVersion', 'v4');
+
     const gitlab = request.defaults({
         baseUrl: url,
         json: true,
@@ -14,7 +18,7 @@ module.exports = ({ url, token }) => {
     const openMr = (repoId, repoHost, branchName, targetBranch, commitMessage, removeSourceBranch) => {
 
         return gitlab.post({
-            url: `/api/v4/projects/${encodeURIComponent(repoId)}/merge_requests`,
+            url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests`,
             body: {
                 id: repoId,
                 source_branch: branchName,
@@ -27,7 +31,7 @@ module.exports = ({ url, token }) => {
 
     const listMrs = repoId => {
         return gitlab.get({
-            url: `/api/v4/projects/${encodeURIComponent(repoId)}/merge_requests`,
+            url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests`,
             qs: {
                 state: 'opened'
             }

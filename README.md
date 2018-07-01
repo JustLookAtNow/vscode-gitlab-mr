@@ -54,6 +54,7 @@ View an existing MR in your browser.
 
 * `gitlab-mr.accessToken`: Access token to use to connect to the Gitlab.com API. Create one by going to Profile Settings -> Access Tokens.
 * `gitlab-mr.accessTokens`: Access token to use to connect to Gitlab CE/EE APIs. Create one by going to Profile Settings -> Access Tokens.
+* `gitlab-mr.apiVersion`: Gitlab API version. Note, `v4` is the only supported API version, but this setting can be used as an escape hatch in case your Gitlab instance is still on `v3`.
 * `gitlab-mr.targetBranch`: Default target branch for MRs (defaults to `master`).
 * `gitlab-mr.targetRemote`: Default target remote for MRs (defaults to `origin`).
 * `gitlab-mr.autoOpenMr`: Automatically open a new MR in your browser.
