@@ -58,6 +58,7 @@ View an existing MR in your browser.
 * `gitlab-mr.targetBranch`: Default target branch for MRs (defaults to `master`).
 * `gitlab-mr.targetRemote`: Default target remote for MRs (defaults to `origin`).
 * `gitlab-mr.autoOpenMr`: Automatically open a new MR in your browser.
+* `gitlab-mr.openToEdit`: Open a new MR to the edit screen after creation.
 * `gitlab-mr.removeSourceBranch`: Set the option to delete the source branch when the MR is merged.
 
 ### Access Tokens Example

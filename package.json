@@ -88,6 +88,11 @@
                     "type": "string",
                     "default": "v4",
                     "description": "Gitlab API version, e.g. v4."
+                },
+                "gitlab-mr.openToEdit": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Open a new MR to the edit screen after creation."
                 }
             }
         }

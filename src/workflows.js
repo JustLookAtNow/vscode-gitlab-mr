@@ -68,6 +68,9 @@ const openMR = () => {
     // Auto-open MR
     const autoOpenMr = preferences.get('autoOpenMr', false);
 
+    // Open to edit screen
+    const openToEdit = preferences.get('openToEdit', false);
+
     // Remove source branch
     const removeSourceBranch = preferences.get('removeSourceBranch', false);
 
@@ -188,15 +191,17 @@ const openMR = () => {
                                     buildStatus.dispose();
                                     vscode.window.setStatusBarMessage(successMessage, STATUS_TIMEOUT);
 
+                                    const mrWebUrl = `${mr.web_url}${openToEdit ? '/edit': ''}`;
+
                                     if (autoOpenMr) {
-                                        open(mr.web_url);
+                                        open(mrWebUrl);
                                         return vscode.window.showInformationMessage(successMessage);
                                     }
 
                                     return vscode.window.showInformationMessage(successMessage, successButton).then(selected => {
                                         switch (selected) {
                                             case successButton: {
-                                                open(mr.web_url);
+                                                open(mrWebUrl);
                                                 break;
                                             }
                                         }
