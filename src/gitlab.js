@@ -2,7 +2,7 @@ const request = require('request-promise');
 const assert = require('assert');
 const vscode = require('vscode');
 
-module.exports = ({ url, token }) => {
+module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
     const preferences = vscode.workspace.getConfiguration('gitlab-mr');
     const apiVersion = preferences.get('apiVersion', 'v4');
 
@@ -15,8 +15,7 @@ module.exports = ({ url, token }) => {
         fullResponse: false
     });
 
-    const openMr = (repoId, repoHost, branchName, targetBranch, commitMessage, removeSourceBranch) => {
-
+    const openMr = (repoHost, branchName, targetBranch, commitMessage, removeSourceBranch) => {
         return gitlab.post({
             url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests`,
             body: {
@@ -29,7 +28,7 @@ module.exports = ({ url, token }) => {
         });
     };
 
-    const listMrs = repoId => {
+    const listMrs = () => {
         return gitlab.get({
             url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests`,
             qs: {
@@ -43,8 +42,30 @@ module.exports = ({ url, token }) => {
         });
     };
 
+    // https://gitlab.com/gitlab-org/gitlab-ce/blob/8-16-stable/doc/api/merge_requests.md#update-mr
+    const editMr = (mergeRequestId, body) => {
+        return gitlab.put({
+            url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests/${mergeRequestId}`,
+            body
+        });
+    };
+
+    const buildMrUrl = (branch, targetBranch) => {
+        return url.format({
+            protocol: repoWebProtocol,
+            host: repoHost,
+            pathname: `${repoId}/merge_requests/new`,
+            query: {
+                'merge_request[source_branch]': branch,
+                'merge_request[target_branch]': targetBranch
+            }
+        });
+    };
+
     return {
         openMr,
-        listMrs
+        listMrs,
+        editMr,
+        buildMrUrl
     };
 };

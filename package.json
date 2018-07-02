@@ -13,7 +13,8 @@
     "activationEvents": [
         "onCommand:extension.openMR",
         "onCommand:extension.viewMR",
-        "onCommand:extension.checkoutMR"
+        "onCommand:extension.checkoutMR",
+        "onCommand:extension.editMR"
     ],
     "main": "./extension",
     "contributes": {
@@ -29,6 +30,10 @@
             {
                 "command": "extension.checkoutMR",
                 "title": "Gitlab MR: Checkout MR"
+            },
+            {
+                "command": "extension.editMR",
+                "title": "Gitlab MR: Edit MR"
             }
         ],
         "keybindings": [

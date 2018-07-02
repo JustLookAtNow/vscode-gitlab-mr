@@ -54,16 +54,55 @@ const selectWorkspaceFolder = () => (
     })
 );
 
+const buildGitlabContext = workspaceFolderPath => (
+    Q.fcall(() => {
+        const preferences = vscode.workspace.getConfiguration('gitlab-mr');
+        const targetRemote = preferences.get('targetRemote', 'origin');
+
+        // Access tokens
+        const gitlabComAccessToken = preferences.get('accessToken');
+        const gitlabCeAccessTokens = preferences.get('accessTokens') || {};
+
+        // Set git context
+        const git = buildGitContext(workspaceFolderPath);
+
+        return git.parseRemotes(targetRemote)
+        .then(({ repoId, repoHost }) => {
+            const gitlabHosts = gitUtils.parseGitlabHosts(gitlabCeAccessTokens);
+            const repoWebProtocol = gitUtils.parseRepoProtocol(repoHost, gitlabHosts);
+
+            const gitlabApiUrl = url.format({
+                host: repoHost,
+                protocol: repoWebProtocol
+            });
+            const isGitlabCom = repoHost === 'gitlab.com';
+            const accessToken = isGitlabCom ? gitlabComAccessToken : gitlabCeAccessTokens[gitlabApiUrl];
+
+            // Token not set for repo host
+            if (!accessToken) {
+                return showAccessTokenErrorMessage(gitlabApiUrl);
+            }
+
+            // Build Gitlab context
+            return gitlabActions({
+                url: gitlabApiUrl,
+                token: accessToken,
+                repoId,
+                repoHost,
+                repoWebProtocol
+            });
+        });
+    })
+);
+
+const buildGitContext = workspaceFolderPath => gitActions(gitApi(workspaceFolderPath));
+
 const openMR = () => {
     const preferences = vscode.workspace.getConfiguration('gitlab-mr');
 
     // Target branch and remote
     const targetBranch = preferences.get('targetBranch', 'master');
     const targetRemote = preferences.get('targetRemote', 'origin');
-
-    // Access tokens
-    const gitlabComAccessToken = preferences.get('accessToken');
-    const gitlabCeAccessTokens = preferences.get('accessTokens') || {};
 
     // Auto-open MR
     const autoOpenMr = preferences.get('autoOpenMr', false);
@@ -80,9 +119,10 @@ const openMR = () => {
             return;
         }
 
+        const workspaceFolderPath = workSpaceFolder.uri.fsPath;
+
         // Set git context
-        const gitContext = gitApi(workSpaceFolder.uri.fsPath);
-        const git = gitActions(gitContext);
+        const git = buildGitContext(workspaceFolderPath);
 
         // Check repo status
         git.checkStatus(targetBranch)
@@ -94,31 +134,8 @@ const openMR = () => {
             return git.lastCommitMessage()
             .then(lastCommitMessage => {
                 // Read remotes to determine where MR will go
-                return git.parseRemotes(targetRemote)
-                .then(result => {
-                    const repoId = result.repoId;
-                    const repoHost = result.repoHost;
-                    const gitlabHosts = gitUtils.parseGitlabHosts(gitlabCeAccessTokens);
-                    const repoWebProtocol = gitUtils.parseRepoProtocol(repoHost, gitlabHosts);
-
-                    const gitlabApiUrl = url.format({
-                        host: repoHost,
-                        protocol: repoWebProtocol
-                    });
-                    const isGitlabCom = repoHost === 'gitlab.com';
-                    const accessToken = isGitlabCom ? gitlabComAccessToken : gitlabCeAccessTokens[gitlabApiUrl];
-
-                    // Token not set for repo host
-                    if (!accessToken) {
-                        return showAccessTokenErrorMessage(gitlabApiUrl);
-                    }
-
-                    // Build Gitlab context
-                    const gitlab = gitlabActions({
-                        url: gitlabApiUrl,
-                        token: accessToken
-                    });
-
+                return buildGitlabContext(workspaceFolderPath)
+                .then(gitlab => {
                     // Prompt user for branch and commit message
                     return vscode.window.showInputBox({
                         prompt: 'Branch Name:',
@@ -182,7 +199,7 @@ const openMR = () => {
                             });
 
                             return gitPromises.then(() => {
-                                return gitlab.openMr(repoId, repoHost, branch, targetBranch, commitMessage, removeSourceBranch)
+                                return gitlab.openMr(branch, targetBranch, commitMessage, removeSourceBranch)
                                 .then(mr => {
                                     // Success message and prompt
                                     const successMessage = message(`MR !${mr.iid} created.`);
@@ -211,15 +228,7 @@ const openMR = () => {
                                     buildStatus.dispose();
 
                                     // Build url to create MR from web ui
-                                    const gitlabNewMrUrl = url.format({
-                                        protocol: repoWebProtocol,
-                                        host: repoHost,
-                                        pathname: `${repoId}/merge_requests/new`,
-                                        query: {
-                                            'merge_request[source_branch]': branch,
-                                            'merge_request[target_branch]': targetBranch
-                                        }
-                                    });
+                                    const gitlabNewMrUrl = gitlab.buildMrUrl(branch, targetBranch);
 
                                     const createButton = 'Create on Gitlab';
 
@@ -244,49 +253,17 @@ const openMR = () => {
     });
 };
 
-const listMRs = workspaceFolder => {
+const listMRs = workspaceFolderPath => {
     const deferred = Q.defer();
 
     const preferences = vscode.workspace.getConfiguration('gitlab-mr');
 
     // Target branch and remote
     const targetBranch = preferences.get('targetBranch', 'master');
-    const targetRemote = preferences.get('targetRemote', 'origin');
 
-    // Access tokens
-    const gitlabComAccessToken = preferences.get('accessToken');
-    const gitlabCeAccessTokens = preferences.get('accessTokens') || {};
-
-    // Set git context
-    const gitContext = gitApi(workspaceFolder);
-    const git = gitActions(gitContext);
-
-    git.parseRemotes(targetRemote)
-    .then(result => {
-        const repoId = result.repoId;
-        const repoHost = result.repoHost;
-        const gitlabHosts = gitUtils.parseGitlabHosts(gitlabCeAccessTokens);
-        const repoWebProtocol = gitUtils.parseRepoProtocol(repoHost, gitlabHosts);
-
-        const gitlabApiUrl = url.format({
-            host: repoHost,
-            protocol: repoWebProtocol
-        });
-        const isGitlabCom = repoHost === 'gitlab.com';
-        const accessToken = isGitlabCom ? gitlabComAccessToken : gitlabCeAccessTokens[gitlabApiUrl];
-
-        // Token not set for repo host
-        if (!accessToken) {
-            return showAccessTokenErrorMessage(gitlabApiUrl);
-        }
-
-        // Build Gitlab context
-        const gitlab = gitlabActions({
-            url: gitlabApiUrl,
-            token: accessToken
-        });
-
-        return gitlab.listMrs(repoId)
+    buildGitlabContext(workspaceFolderPath)
+    .then(gitlab => {
+        return gitlab.listMrs()
         .then(mrs => {
             const mrList = mrs.map(mr => {
                 const label = `MR !${mr.iid}: ${mr.title}`;
@@ -329,6 +306,7 @@ const viewMR = () => {
         if (!workSpaceFolder) {
             return;
         }
+
         listMRs(workSpaceFolder.uri.fsPath)
         .then(mr => {
             if (!mr) {
@@ -344,31 +322,30 @@ const viewMR = () => {
 };
 
 const checkoutMR = () => {
+    const preferences = vscode.workspace.getConfiguration('gitlab-mr');
+    const targetRemote = preferences.get('targetRemote', 'master');
+
     selectWorkspaceFolder()
     .then(workSpaceFolder => {
         if (!workSpaceFolder) {
             return;
         }
-        listMRs(workSpaceFolder.uri.fsPath)
+
+        const workspaceFolderPath = workSpaceFolder.uri.fsPath;
+
+        listMRs(workspaceFolderPath)
         .then(mr => {
             if (!mr) {
                 return showErrorMessage('MR not selected.');
             }
 
-            const branchName = mr.source_branch;
-
-            // Preferences
-            const preferences = vscode.workspace.getConfiguration('gitlab-mr');
-            const targetRemote = preferences.get('targetRemote', 'origin');
-
-            // Git context
-            const gitContext = gitApi(workSpaceFolder.uri.fsPath);
-            const git = gitActions(gitContext);
+            const git = buildGitContext(workspaceFolderPath);
 
             const checkoutStatus = vscode.window.setStatusBarMessage(message(`Checking out MR !${mr.iid}...`));
 
             return git.listBranches()
             .then(branches => {
+                const branchName = mr.source_branch;
                 const targetBranch = branches.branches[branchName];
 
                 if (targetBranch) {
@@ -397,9 +374,52 @@ const checkoutMR = () => {
     });
 };
 
+const editMR = () => {
+    selectWorkspaceFolder()
+    .then(workSpaceFolder => {
+        if (!workSpaceFolder) {
+            return;
+        }
+
+        const workspaceFolderPath = workSpaceFolder.uri.fsPath;
+
+        return listMRs(workspaceFolderPath)
+        .then(mr => {
+            if (!mr) {
+                return;
+            }
+
+            return buildGitlabContext(workspaceFolderPath)
+            .then(gitlab => {
+                const editCommands = {
+                    assign: 'Set assigned user'
+                };
+
+                return vscode.window.showQuickPick([
+                    editCommands.assign
+                ])
+                .then(selected => {
+                    switch (selected) {
+                        case editCommands.assign:
+                            return gitlab.editMr(mr.iid, {
+                                assignee_id: 1
+                            });
+                        default:
+                            break;
+                    }
+                });
+            });
+        });
+    })
+    .catch(err => {
+        showErrorMessage(err.message);
+    });
+};
+
 module.exports = {
     listMRs,
     viewMR,
     checkoutMR,
-    openMR
+    openMR,
+    editMR
 };
