@@ -429,8 +429,8 @@ const editMR = () => {
             return buildGitlabContext(workspaceFolderPath)
             .then(gitlab => {
                 const editCommands = {
-                    editAssignee: 'Edit assignee',
-                    removeAssignee: 'Remove assignee'
+                    editAssignee: mr.assignee ? `Edit assignee (${mr.assignee.username})`: 'Set assignee',
+                    removeAssignee: `Remove assignee ${mr.assignee ? `(${mr.assignee.username})` : ''}`
                 };
 
                 return vscode.window.showQuickPick([
