@@ -374,6 +374,43 @@ const checkoutMR = () => {
     });
 };
 
+const searchUsers = gitlab => {
+    return vscode.window.showInputBox({
+        placeHolder: 'Search for user...'
+    })
+        .then(search => {
+            if (search) {
+                return gitlab.searchUsers(search);
+            }
+        })
+        .then(users => {
+            if (users) {
+                const userOptions = users.map(user => ({
+                    label: `${user.name} (${user.username})`,
+                    user
+                }));
+
+                const otherOptions = [
+                    { label: 'Search again...', searchAgain: true }
+                ];
+
+                return vscode.window.showQuickPick([
+                    ...userOptions,
+                    ...otherOptions
+                ], {
+                    placeHolder: 'Select a user...'
+                })
+                .then(selection => {
+                    if (selection.searchAgain) {
+                        return searchUsers(gitlab);
+                    }
+
+                    return selection;
+                });
+            }
+        });
+};
+
 const editMR = () => {
     selectWorkspaceFolder()
     .then(workSpaceFolder => {
@@ -392,18 +429,37 @@ const editMR = () => {
             return buildGitlabContext(workspaceFolderPath)
             .then(gitlab => {
                 const editCommands = {
-                    assign: 'Set assigned user'
+                    editAssignee: 'Edit assignee',
+                    removeAssignee: 'Remove assignee'
                 };
 
                 return vscode.window.showQuickPick([
-                    editCommands.assign
-                ])
+                    editCommands.editAssignee,
+                    editCommands.removeAssignee
+                ], {
+                    placeHolder: 'Select an action...'
+                })
                 .then(selected => {
                     switch (selected) {
-                        case editCommands.assign:
+                        case editCommands.editAssignee:
+                            return searchUsers(gitlab)
+                                .then(selection => {
+                                    if (selection) {
+                                        return gitlab.editMr(mr.iid, {
+                                            assignee_id: selection.user.id
+                                        })
+                                            .then(() => {
+                                                return vscode.window.showInformationMessage(message(`MR !${mr.iid} assignee set to ${selection.user.username}`));
+                                            });
+                                    }
+                                });
+                        case editCommands.removeAssignee:
                             return gitlab.editMr(mr.iid, {
-                                assignee_id: 1
-                            });
+                                assignee_id: null
+                            })
+                                .then(() => {
+                                    return vscode.window.showInformationMessage(message(`MR !${mr.iid} assignee removed.`));
+                                });
                         default:
                             break;
                     }

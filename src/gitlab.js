@@ -42,6 +42,15 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         });
     };
 
+    const searchUsers = search => {
+        return gitlab.get({
+            url: `/api/${apiVersion}/users`,
+            qs: {
+                search
+            }
+        });
+    };
+
     // https://gitlab.com/gitlab-org/gitlab-ce/blob/8-16-stable/doc/api/merge_requests.md#update-mr
     const editMr = (mergeRequestId, body) => {
         return gitlab.put({
@@ -66,6 +75,7 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         openMr,
         listMrs,
         editMr,
-        buildMrUrl
+        buildMrUrl,
+        searchUsers
     };
 };
