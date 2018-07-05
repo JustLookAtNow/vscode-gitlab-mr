@@ -36,25 +36,22 @@ const showAccessTokenErrorMessage = gitlabApiUrl => {
     });
 };
 
-const selectWorkspaceFolder = () => (
-    Q.fcall(() => {
-        if (vscode.workspace.workspaceFolders.length > 1) {
-            return vscode.window.showQuickPick(vscode.workspace.workspaceFolders.map(folder => ({
-                label: folder.name,
-                folder
-            })), {
-                placeHolder: 'Select workspace folder'
-            })
-                .then(selected => {
-                    if (selected) {
-                        return selected.folder;
-                    }
-                });
-        } else {
-            return vscode.workspace.workspaceFolders[0];
+const selectWorkspaceFolder = async () => {
+    if (vscode.workspace.workspaceFolders.length > 1) {
+        const selected = await vscode.window.showQuickPick(vscode.workspace.workspaceFolders.map(folder => ({
+            label: folder.name,
+            folder
+        })), {
+            placeHolder: 'Select workspace folder'
+        });
+
+        if (selected) {
+            return selected.folder;
         }
-    })
-);
+    } else {
+        return vscode.workspace.workspaceFolders[0];
+    }
+};
 
 const buildGitlabContext = workspaceFolderPath => (
     Q.fcall(() => {
@@ -425,111 +422,97 @@ const searchUsers = gitlab => {
         });
 };
 
-const editMR = () => {
-    selectWorkspaceFolder()
-        .then(workSpaceFolder => {
-            if (!workSpaceFolder) {
-                return;
+const editMR = async () => {
+    const workspaceFolder = await selectWorkspaceFolder();
+    if (!workspaceFolder) {
+        return;
+    }
+
+    const workspaceFolderPath = workspaceFolder.uri.fsPath;
+    const mr = await listMRs(workspaceFolderPath);
+    if (!mr) {
+        return;
+    }
+
+    const gitlab = await buildGitlabContext(workspaceFolderPath);
+
+    const editCommands = {
+        editTitle: 'Edit title',
+        setWip: mr.work_in_progress ? 'Remove WIP' : 'Set as WIP',
+        editAssignee: mr.assignee ? `Edit assignee (${mr.assignee.username})`: 'Set assignee',
+        removeAssignee: `Remove assignee ${mr.assignee ? `(${mr.assignee.username})` : ''}`,
+        addApprovers: 'Add approvers'
+    };
+
+    const selected = await vscode.window.showQuickPick(Object.values(editCommands), {
+        placeHolder: 'Select an action...'
+    });
+
+    const showGitlabError = e => {
+        showErrorMessage(e.error.error || e.error.message);
+    };
+
+    switch (selected) {
+        case editCommands.editTitle:
+            const title = await vscode.window.showInputBox({
+                value: mr.title
+            });
+
+            if (title) {
+                return gitlab.editMr(mr.iid, {
+                    title
+                })
+                    .then(() => vscode.window.showInformationMessage(message(`MR !${mr.iid} title updated.`)))
+                    .catch(showGitlabError);
             }
+            break;
 
-            const workspaceFolderPath = workSpaceFolder.uri.fsPath;
+        case editCommands.setWip:
+            return gitlab.editMr(mr.iid, {
+                title: mr.work_in_progress ? mr.title.split(WIP_STRING)[1].trim() : `${WIP_STRING} ${mr.title}`
+            })
+                .then(updatedMr => vscode.window.showInformationMessage(message(`MR !${mr.iid} WIP ${updatedMr.work_in_progress ? 'added' : 'removed'}.`)))
+                .catch(showGitlabError);
 
-            return listMRs(workspaceFolderPath)
-                .then(mr => {
-                    if (!mr) {
-                        return;
-                    }
+        case editCommands.editAssignee:
+            const assignee = await searchUsers(gitlab);
+            if (assignee) {
+                return gitlab.editMr(mr.iid, {
+                    assignee_id: assignee.user.id
+                })
+                    .then(() => vscode.window.showInformationMessage(message(`MR !${mr.iid} assignee set to ${assignee.user.username}`)))
+                    .catch(showGitlabError);
+            }
+            break;
 
-                    return buildGitlabContext(workspaceFolderPath)
-                        .then(gitlab => {
-                            const editCommands = {
-                                editTitle: 'Edit title',
-                                setWip: mr.work_in_progress ? 'Remove WIP' : 'Set as WIP',
-                                editAssignee: mr.assignee ? `Edit assignee (${mr.assignee.username})`: 'Set assignee',
-                                removeAssignee: `Remove assignee ${mr.assignee ? `(${mr.assignee.username})` : ''}`,
-                                addApprovers: 'Add approvers'
-                            };
+        case editCommands.removeAssignee:
+            return gitlab.editMr(mr.iid, {
+                assignee_id: null
+            })
+                .then(() => vscode.window.showInformationMessage(message(`MR !${mr.iid} assignee removed.`)))
+                .catch(showGitlabError);
 
-                            return vscode.window.showQuickPick(Object.values(editCommands), {
-                                placeHolder: 'Select an action...'
-                            })
-                                .then(selected => {
-                                    switch (selected) {
-                                        case editCommands.editTitle:
-                                            return vscode.window.showInputBox({
-                                                value: mr.title
-                                            })
-                                                .then(title => {
-                                                    if (title) {
-                                                        return gitlab.editMr(mr.iid, {
-                                                            title
-                                                        })
-                                                            .then(() => {
-                                                                return vscode.window.showInformationMessage(message(`MR !${mr.iid} title updated.`));
-                                                            });
-                                                    }
-                                                });
+        case editCommands.addApprovers:
+            const approvals = await gitlab.getApprovals(mr.iid);
+            const approver = await searchUsers(gitlab);
+            if (approver) {
+                return gitlab.editApprovers(mr.iid, {
+                    approver_ids: [
+                        ...approvals.approvers.map(app => app.user.id),
+                        approver.user.id
+                    ],
+                    approver_group_ids: [
+                        ...approvals.approver_groups.map(app => app.group.id)
+                    ]
+                })
+                    .then(() => vscode.window.showInformationMessage(message(`MR !${mr.iid} approver added.`)))
+                    .catch(showGitlabError);
+            }
+            break;
 
-                                        case editCommands.setWip:
-                                            return gitlab.editMr(mr.iid, {
-                                                title: mr.work_in_progress ? mr.title.split(WIP_STRING)[1].trim() : `${WIP_STRING} ${mr.title}`
-                                            })
-                                                .then(updatedMr => {
-                                                    return vscode.window.showInformationMessage(message(`MR !${mr.iid} WIP ${updatedMr.work_in_progress ? 'added' : 'removed'}.`));
-                                                });
-
-                                        case editCommands.editAssignee:
-                                            return searchUsers(gitlab)
-                                                .then(selection => {
-                                                    if (selection) {
-                                                        return gitlab.editMr(mr.iid, {
-                                                            assignee_id: selection.user.id
-                                                        })
-                                                            .then(() => {
-                                                                return vscode.window.showInformationMessage(message(`MR !${mr.iid} assignee set to ${selection.user.username}`));
-                                                            });
-                                                    }
-                                                });
-
-                                        case editCommands.removeAssignee:
-                                            return gitlab.editMr(mr.iid, {
-                                                assignee_id: null
-                                            })
-                                                .then(() => {
-                                                    return vscode.window.showInformationMessage(message(`MR !${mr.iid} assignee removed.`));
-                                                });
-
-                                        case editCommands.addApprovers:
-                                            return gitlab.getApprovals(mr.iid)
-                                                .then(approvals => {
-                                                    return searchUsers(gitlab)
-                                                        .then(selection => {
-                                                            if (selection) {
-                                                                return gitlab.editApprovers(mr.iid, {
-                                                                    approver_ids: [
-                                                                        ...approvals.approvers.map(app => app.user.id),
-                                                                        selection.user.id
-                                                                    ],
-                                                                    approver_group_ids: [
-                                                                        ...approvals.approver_groups.map(app => app.group.id)
-                                                                    ]
-                                                                })
-                                                                    .then(() => {
-                                                                        return vscode.window.showInformationMessage(message(`MR !${mr.iid} approver added.`));
-                                                                    });
-                                                            }
-                                                        });
-                                                });
-                                        default:
-                                            break;
-                                    }
-                                });
-                        });
-                });
-        })
-        .catch(err => {
-            showErrorMessage(err.message);
-        });
+        default:
+            break;
+    }
 };
 
 module.exports = {
