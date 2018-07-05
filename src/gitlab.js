@@ -41,11 +41,11 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
                 state: 'opened'
             }
         })
-        .then(mrs => {
-            assert(mrs && mrs.length, 'No MRs found.');
+            .then(mrs => {
+                assert(mrs && mrs.length, 'No MRs found.');
 
-            return mrs;
-        });
+                return mrs;
+            });
     };
 
     const searchUsers = search => {

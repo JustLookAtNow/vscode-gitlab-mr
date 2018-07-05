@@ -121,7 +121,7 @@
         "@types/mocha": "^2.2.39",
         "@types/node": "^6.0.63",
         "chai": "^3.5.0",
-        "eslint": "^3.16.1",
+        "eslint": "^4.19.1",
         "mocha": "^3.2.0",
         "pre-commit": "^1.2.2",
         "typescript": "^2.2.1",
