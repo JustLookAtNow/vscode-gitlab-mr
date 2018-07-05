@@ -59,6 +59,21 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         });
     };
 
+    // https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration
+    const getApprovals = mergeRequestId => {
+        return gitlab.get({
+            url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests/${mergeRequestId}/approvals`
+        });
+    };
+
+    // https://docs.gitlab.com/ee/api/merge_request_approvals.html#change-allowed-approvers-for-merge-request
+    const editApprovers = (mergeRequestId, body) => {
+        return gitlab.put({
+            url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests/${mergeRequestId}/approvers`,
+            body
+        });
+    };
+
     const buildMrUrl = (branch, targetBranch) => {
         return url.format({
             protocol: repoWebProtocol,
@@ -76,6 +91,8 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         listMrs,
         editMr,
         buildMrUrl,
-        searchUsers
+        searchUsers,
+        getApprovals,
+        editApprovers
     };
 };

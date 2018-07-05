@@ -430,12 +430,14 @@ const editMR = () => {
             .then(gitlab => {
                 const editCommands = {
                     editAssignee: mr.assignee ? `Edit assignee (${mr.assignee.username})`: 'Set assignee',
-                    removeAssignee: `Remove assignee ${mr.assignee ? `(${mr.assignee.username})` : ''}`
+                    removeAssignee: `Remove assignee ${mr.assignee ? `(${mr.assignee.username})` : ''}`,
+                    addApprovers: 'Add approvers'
                 };
 
                 return vscode.window.showQuickPick([
                     editCommands.editAssignee,
-                    editCommands.removeAssignee
+                    editCommands.removeAssignee,
+                    editCommands.addApprovers
                 ], {
                     placeHolder: 'Select an action...'
                 })
@@ -453,12 +455,35 @@ const editMR = () => {
                                             });
                                     }
                                 });
+
                         case editCommands.removeAssignee:
                             return gitlab.editMr(mr.iid, {
                                 assignee_id: null
                             })
                                 .then(() => {
                                     return vscode.window.showInformationMessage(message(`MR !${mr.iid} assignee removed.`));
+                                });
+
+                        case editCommands.addApprovers:
+                            return gitlab.getApprovals(mr.iid)
+                                .then(approvals => {
+                                    return searchUsers(gitlab)
+                                        .then(selection => {
+                                            if (selection) {
+                                                return gitlab.editApprovers(mr.iid, {
+                                                    approver_ids: [
+                                                        ...approvals.approvers.map(app => app.user.id),
+                                                        selection.user.id
+                                                    ],
+                                                    approver_group_ids: [
+                                                        ...approvals.approver_groups.map(app => app.group.id)
+                                                    ]
+                                                })
+                                                .then(() => {
+                                                    return vscode.window.showInformationMessage(message(`MR !${mr.iid} approver added.`));
+                                                });
+                                            }
+                                        });
                                 });
                         default:
                             break;
