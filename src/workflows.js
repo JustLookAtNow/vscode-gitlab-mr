@@ -12,6 +12,7 @@ const message = msg => `Gitlab MR: ${msg}`;
 const ERROR_STATUS = message('Unable to create MR.');
 const STATUS_TIMEOUT = 10000;
 const WIP_STRING = 'WIP:';
+const CONFIG_NAMESPACE = 'gitlab-mr';
 
 const showErrorMessage = msg => {
     vscode.window.showErrorMessage(message(msg));
@@ -57,7 +58,7 @@ const selectWorkspaceFolder = () => (
 
 const buildGitlabContext = workspaceFolderPath => (
     Q.fcall(() => {
-        const preferences = vscode.workspace.getConfiguration('gitlab-mr');
+        const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
         const targetRemote = preferences.get('targetRemote', 'origin');
 
         // Access tokens
@@ -99,7 +100,7 @@ const buildGitlabContext = workspaceFolderPath => (
 const buildGitContext = workspaceFolderPath => gitActions(gitApi(workspaceFolderPath));
 
 const openMR = () => {
-    const preferences = vscode.workspace.getConfiguration('gitlab-mr');
+    const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
 
     // Target branch and remote
     const targetRemote = preferences.get('targetRemote', 'origin');
@@ -269,7 +270,7 @@ const openMR = () => {
 const listMRs = workspaceFolderPath => {
     const deferred = Q.defer();
 
-    const preferences = vscode.workspace.getConfiguration('gitlab-mr');
+    const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
 
     // Target branch and remote
     const targetBranch = preferences.get('targetBranch', 'master');
@@ -335,7 +336,7 @@ const viewMR = () => {
 };
 
 const checkoutMR = () => {
-    const preferences = vscode.workspace.getConfiguration('gitlab-mr');
+    const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
     const targetRemote = preferences.get('targetRemote', 'master');
 
     selectWorkspaceFolder()
