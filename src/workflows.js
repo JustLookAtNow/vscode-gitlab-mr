@@ -53,46 +53,42 @@ const selectWorkspaceFolder = async () => {
     }
 };
 
-const buildGitlabContext = workspaceFolderPath => (
-    Q.fcall(() => {
-        const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-        const targetRemote = preferences.get('targetRemote', 'origin');
+const buildGitlabContext = async workspaceFolderPath => {
+    const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+    const targetRemote = preferences.get('targetRemote', 'origin');
 
-        // Access tokens
-        const gitlabComAccessToken = preferences.get('accessToken');
-        const gitlabCeAccessTokens = preferences.get('accessTokens') || {};
+    // Access tokens
+    const gitlabComAccessToken = preferences.get('accessToken');
+    const gitlabCeAccessTokens = preferences.get('accessTokens') || {};
 
-        // Set git context
-        const git = buildGitContext(workspaceFolderPath);
+    // Set git context
+    const git = buildGitContext(workspaceFolderPath);
 
-        return git.parseRemotes(targetRemote)
-            .then(({ repoId, repoHost }) => {
-                const gitlabHosts = gitUtils.parseGitlabHosts(gitlabCeAccessTokens);
-                const repoWebProtocol = gitUtils.parseRepoProtocol(repoHost, gitlabHosts);
+    const { repoId, repoHost } = await git.parseRemotes(targetRemote);
+    const gitlabHosts = gitUtils.parseGitlabHosts(gitlabCeAccessTokens);
+    const repoWebProtocol = gitUtils.parseRepoProtocol(repoHost, gitlabHosts);
 
-                const gitlabApiUrl = url.format({
-                    host: repoHost,
-                    protocol: repoWebProtocol
-                });
-                const isGitlabCom = repoHost === 'gitlab.com';
-                const accessToken = isGitlabCom ? gitlabComAccessToken : gitlabCeAccessTokens[gitlabApiUrl];
+    const gitlabApiUrl = url.format({
+        host: repoHost,
+        protocol: repoWebProtocol
+    });
+    const isGitlabCom = repoHost === 'gitlab.com';
+    const accessToken = isGitlabCom ? gitlabComAccessToken : gitlabCeAccessTokens[gitlabApiUrl];
 
-                // Token not set for repo host
-                if (!accessToken) {
-                    return showAccessTokenErrorMessage(gitlabApiUrl);
-                }
+    // Token not set for repo host
+    if (!accessToken) {
+        return showAccessTokenErrorMessage(gitlabApiUrl);
+    }
 
-                // Build Gitlab context
-                return gitlabActions({
-                    url: gitlabApiUrl,
-                    token: accessToken,
-                    repoId,
-                    repoHost,
-                    repoWebProtocol
-                });
-            });
-    })
-);
+    // Build Gitlab context
+    return gitlabActions({
+        url: gitlabApiUrl,
+        token: accessToken,
+        repoId,
+        repoHost,
+        repoWebProtocol
+    });
+};
 
 const buildGitContext = workspaceFolderPath => gitActions(gitApi(workspaceFolderPath));
 
@@ -111,7 +107,7 @@ const openMR = () => {
     // Remove source branch
     const removeSourceBranch = preferences.get('removeSourceBranch', false);
 
-    selectWorkspaceFolder()
+    return selectWorkspaceFolder()
         .then(workSpaceFolder => {
             if (!workSpaceFolder) {
                 return;
@@ -256,170 +252,137 @@ const openMR = () => {
                                                 });
                                         });
                                 });
-                        })
-                        .catch(err => {
-                            showErrorMessage(err.message);
                         });
                 });
         });
 };
 
-const listMRs = workspaceFolderPath => {
-    const deferred = Q.defer();
-
+const listMRs = async workspaceFolderPath => {
     const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
 
     // Target branch and remote
     const targetBranch = preferences.get('targetBranch', 'master');
 
-    buildGitlabContext(workspaceFolderPath)
-        .then(gitlab => {
-            return gitlab.listMrs()
-                .then(mrs => {
-                    const mrList = mrs.map(mr => {
-                        const label = `MR !${mr.iid}: ${mr.title}`;
-                        const detail = mr.description;
-                        let description = `${mr.source_branch}`;
+    const gitlab = await buildGitlabContext(workspaceFolderPath);
+    const mrs = await gitlab.listMrs();
 
-                        if (mr.target_branch !== targetBranch) {
-                            description += ` > ${mr.target_branch}`;
-                        }
+    const mrList = mrs.map(mr => {
+        const label = `MR !${mr.iid}: ${mr.title}`;
+        const detail = mr.description;
+        let description = `${mr.source_branch}`;
 
-                        return {
-                            mr,
-                            label,
-                            detail,
-                            description
-                        };
-                    });
+        if (mr.target_branch !== targetBranch) {
+            description += ` > ${mr.target_branch}`;
+        }
 
-                    return vscode.window.showQuickPick(mrList, {
-                        matchOnDescription: true,
-                        placeHolder: 'Select MR'
-                    })
-                        .then(selected => {
-                            if (selected) {
-                                deferred.resolve(selected.mr);
-                            }
-                        });
-                });
-        })
-        .catch(err => {
-            deferred.reject(err);
-        });
+        return {
+            mr,
+            label,
+            detail,
+            description
+        };
+    });
 
-    return deferred.promise;
+    const selected = await vscode.window.showQuickPick(mrList, {
+        matchOnDescription: true,
+        placeHolder: 'Select MR'
+    });
+
+    if (selected) {
+        return selected.mr;
+    }
 };
 
-const viewMR = () => {
-    selectWorkspaceFolder()
-        .then(workSpaceFolder => {
-            if (!workSpaceFolder) {
-                return;
-            }
+const viewMR = async () => {
+    const workspaceFolder = await selectWorkspaceFolder();
+    if (!workspaceFolder) {
+        return;
+    }
 
-            listMRs(workSpaceFolder.uri.fsPath)
-                .then(mr => {
-                    if (!mr) {
-                        return showErrorMessage('MR not selected.');
-                    }
+    const mr = await listMRs(workspaceFolder.uri.fsPath);
+    if (!mr) {
+        return showErrorMessage('MR not selected.');
+    }
 
-                    open(mr.web_url);
-                })
-                .catch(err => {
-                    showErrorMessage(err.message);
-                });
-        });
+    open(mr.web_url);
 };
 
-const checkoutMR = () => {
+const checkoutMR = async () => {
     const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
     const targetRemote = preferences.get('targetRemote', 'master');
 
-    selectWorkspaceFolder()
-        .then(workSpaceFolder => {
-            if (!workSpaceFolder) {
-                return;
+    const workspaceFolder  = await selectWorkspaceFolder();
+    if (!workspaceFolder) {
+        return;
+    }
+
+    const workspaceFolderPath = workspaceFolder.uri.fsPath;
+
+    const mr = await listMRs(workspaceFolderPath);
+    if (!mr) {
+        return showErrorMessage('MR not selected.');
+    }
+
+    const git = buildGitContext(workspaceFolderPath);
+
+    const checkoutStatus = vscode.window.setStatusBarMessage(message(`Checking out MR !${mr.iid}...`));
+
+    return git.listBranches()
+        .then(async branches => {
+            const branchName = mr.source_branch;
+            const targetBranch = branches.branches[branchName];
+
+            if (targetBranch) {
+                // Switch to existing branch
+                return git.checkoutBranch([branchName]);
             }
 
-            const workspaceFolderPath = workSpaceFolder.uri.fsPath;
-
-            listMRs(workspaceFolderPath)
-                .then(mr => {
-                    if (!mr) {
-                        return showErrorMessage('MR not selected.');
-                    }
-
-                    const git = buildGitContext(workspaceFolderPath);
-
-                    const checkoutStatus = vscode.window.setStatusBarMessage(message(`Checking out MR !${mr.iid}...`));
-
-                    return git.listBranches()
-                        .then(branches => {
-                            const branchName = mr.source_branch;
-                            const targetBranch = branches.branches[branchName];
-
-                            if (targetBranch) {
-                                // Switch to existing branch
-                                return git.checkoutBranch([branchName]);
-                            }
-
-                            // Fetch and switch to remote branch
-                            return git.fetchRemote(targetRemote, branchName)
-                                .then(() => {
-                                    return git.checkoutBranch(['-b', branchName, `${targetRemote}/${branchName}`]);
-                                });
-                        })
-                        .then(() => {
-                            checkoutStatus.dispose();
-                            vscode.window.setStatusBarMessage(message(`Switched to MR !${mr.iid}.`), STATUS_TIMEOUT);
-                        })
-                        .catch(err => {
-                            checkoutStatus.dispose();
-                            showErrorMessage(err.message);
-                        });
-                })
-                .catch(err => {
-                    showErrorMessage(err.message);
-                });
+            // Fetch and switch to remote branch
+            await git.fetchRemote(targetRemote, branchName);
+            return git.checkoutBranch(['-b', branchName, `${targetRemote}/${branchName}`]);
+        })
+        .then(() => {
+            checkoutStatus.dispose();
+            vscode.window.setStatusBarMessage(message(`Switched to MR !${mr.iid}.`), STATUS_TIMEOUT);
+        })
+        .catch(err => {
+            checkoutStatus.dispose();
+            showErrorMessage(err.message);
         });
 };
 
-const searchUsers = gitlab => {
-    return vscode.window.showInputBox({
+const searchUsers = async gitlab => {
+    const search = await vscode.window.showInputBox({
         placeHolder: 'Search for user...'
-    })
-        .then(search => {
-            if (search) {
-                return gitlab.searchUsers(search);
+    });
+
+    if (search) {
+        const users = await gitlab.searchUsers(search);
+
+        if (users) {
+            const userOptions = users.map(user => ({
+                label: `${user.name} (${user.username})`,
+                user
+            }));
+
+            const otherOptions = [
+                { label: 'Search again...', searchAgain: true }
+            ];
+
+            const selection = await vscode.window.showQuickPick([
+                ...userOptions,
+                ...otherOptions
+            ], {
+                placeHolder: 'Select a user...'
+            });
+
+            if (selection.searchAgain) {
+                return searchUsers(gitlab);
             }
-        })
-        .then(users => {
-            if (users) {
-                const userOptions = users.map(user => ({
-                    label: `${user.name} (${user.username})`,
-                    user
-                }));
 
-                const otherOptions = [
-                    { label: 'Search again...', searchAgain: true }
-                ];
-
-                return vscode.window.showQuickPick([
-                    ...userOptions,
-                    ...otherOptions
-                ], {
-                    placeHolder: 'Select a user...'
-                })
-                    .then(selection => {
-                        if (selection.searchAgain) {
-                            return searchUsers(gitlab);
-                        }
-
-                        return selection;
-                    });
-            }
-        });
+            return selection;
+        }
+    }
 };
 
 const editMR = async () => {
@@ -516,9 +479,9 @@ const editMR = async () => {
 };
 
 module.exports = {
-    listMRs,
-    viewMR,
-    checkoutMR,
-    openMR,
-    editMR
+    listMRs: () => listMRs().catch(e => showErrorMessage(e.message)),
+    viewMR: () => viewMR().catch(e => showErrorMessage(e.message)),
+    checkoutMR: () => checkoutMR().catch(e => showErrorMessage(e.message)),
+    openMR: () => openMR().catch(e => showErrorMessage(e.message)),
+    editMR: () => editMR().catch(e => showErrorMessage(e.message))
 };
