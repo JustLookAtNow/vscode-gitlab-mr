@@ -46,7 +46,8 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         return gitlab.get({
             url: `/api/${apiVersion}/users`,
             qs: {
-                search
+                search,
+                active: true
             }
         });
     };
