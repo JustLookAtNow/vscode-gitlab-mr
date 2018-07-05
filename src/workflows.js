@@ -11,6 +11,7 @@ const gitUtils = require('./git-utils');
 const message = msg => `Gitlab MR: ${msg}`;
 const ERROR_STATUS = message('Unable to create MR.');
 const STATUS_TIMEOUT = 10000;
+const WIP_STRING = 'WIP:';
 
 const showErrorMessage = msg => {
     vscode.window.showErrorMessage(message(msg));
@@ -430,17 +431,13 @@ const editMR = () => {
             .then(gitlab => {
                 const editCommands = {
                     editTitle: 'Edit title',
+                    setWip: mr.work_in_progress ? 'Remove WIP' : 'Set as WIP',
                     editAssignee: mr.assignee ? `Edit assignee (${mr.assignee.username})`: 'Set assignee',
                     removeAssignee: `Remove assignee ${mr.assignee ? `(${mr.assignee.username})` : ''}`,
                     addApprovers: 'Add approvers'
                 };
 
-                return vscode.window.showQuickPick([
-                    editCommands.editTitle,
-                    editCommands.editAssignee,
-                    editCommands.removeAssignee,
-                    editCommands.addApprovers
-                ], {
+                return vscode.window.showQuickPick(Object.values(editCommands), {
                     placeHolder: 'Select an action...'
                 })
                 .then(selected => {
@@ -458,6 +455,14 @@ const editMR = () => {
                                                 return vscode.window.showInformationMessage(message(`MR !${mr.iid} title updated.`));
                                             });
                                     }
+                                });
+
+                        case editCommands.setWip:
+                            return gitlab.editMr(mr.iid, {
+                                title: mr.work_in_progress ? mr.title.split(WIP_STRING)[1].trim() : `${WIP_STRING} ${mr.title}`
+                            })
+                                .then(updatedMr => {
+                                    return vscode.window.showInformationMessage(message(`MR !${mr.iid} WIP ${updatedMr.work_in_progress ? 'added' : 'removed'}.`));
                                 });
 
                         case editCommands.editAssignee:
