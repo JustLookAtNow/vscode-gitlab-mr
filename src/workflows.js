@@ -429,12 +429,14 @@ const editMR = () => {
             return buildGitlabContext(workspaceFolderPath)
             .then(gitlab => {
                 const editCommands = {
+                    editTitle: 'Edit title',
                     editAssignee: mr.assignee ? `Edit assignee (${mr.assignee.username})`: 'Set assignee',
                     removeAssignee: `Remove assignee ${mr.assignee ? `(${mr.assignee.username})` : ''}`,
                     addApprovers: 'Add approvers'
                 };
 
                 return vscode.window.showQuickPick([
+                    editCommands.editTitle,
                     editCommands.editAssignee,
                     editCommands.removeAssignee,
                     editCommands.addApprovers
@@ -443,6 +445,21 @@ const editMR = () => {
                 })
                 .then(selected => {
                     switch (selected) {
+                        case editCommands.editTitle:
+                            return vscode.window.showInputBox({
+                                value: mr.title
+                            })
+                                .then(title => {
+                                    if (title) {
+                                        return gitlab.editMr(mr.iid, {
+                                            title
+                                        })
+                                            .then(() => {
+                                                return vscode.window.showInformationMessage(message(`MR !${mr.iid} title updated.`));
+                                            });
+                                    }
+                                });
+
                         case editCommands.editAssignee:
                             return searchUsers(gitlab)
                                 .then(selection => {
