@@ -89,6 +89,11 @@
                     "default": false,
                     "description": "Remove source branch after merging."
                 },
+                "gitlab-mr.useDefaultBranch": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When creating MRs, use default_branch set in repository as target branch."
+                },
                 "gitlab-mr.apiVersion": {
                     "type": "string",
                     "default": "v4",

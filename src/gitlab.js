@@ -15,7 +15,13 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         fullResponse: false
     });
 
-    const openMr = (repoHost, branchName, targetBranch, commitMessage, removeSourceBranch) => {
+    const getRepo = () => {
+        return gitlab.get({
+            url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}`
+        });
+    };
+
+    const openMr = (branchName, targetBranch, commitMessage, removeSourceBranch) => {
         return gitlab.post({
             url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests`,
             body: {
@@ -88,6 +94,7 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
     };
 
     return {
+        getRepo,
         openMr,
         listMrs,
         editMr,

@@ -57,6 +57,7 @@ View an existing MR in your browser.
 * `gitlab-mr.apiVersion`: Gitlab API version. Note, `v4` is the only supported API version, but this setting can be used as an escape hatch in case your Gitlab instance is still on `v3`.
 * `gitlab-mr.targetBranch`: Default target branch for MRs (defaults to `master`).
 * `gitlab-mr.targetRemote`: Default target remote for MRs (defaults to `origin`).
+* `gitlab-mr.useDefaultBranch`: When creating MRs, use `default_branch` set in repository as target branch.;
 * `gitlab-mr.autoOpenMr`: Automatically open a new MR in your browser.
 * `gitlab-mr.openToEdit`: Open a new MR to the edit screen after creation.
 * `gitlab-mr.removeSourceBranch`: Set the option to delete the source branch when the MR is merged.
