@@ -130,7 +130,6 @@
     "dependencies": {
         "lodash.trimstart": "^4.5.1",
         "opn": "^4.0.2",
-        "q": "^1.4.1",
         "request": "^2.87.0",
         "request-promise": "^4.2.2",
         "simple-git": "^1.66.0",

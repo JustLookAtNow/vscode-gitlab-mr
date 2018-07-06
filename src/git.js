@@ -1,182 +1,71 @@
-const Q = require('q');
 const gitUtils = require('./git-utils');
+const gitApi = require('simple-git/promise');
+const assert = require('assert');
 
-module.exports = gitContext => {
-    const checkStatus = targetBranch => {
-        const deferred = Q.defer();
+module.exports = workspaceFolderPath => {
+    const gitContext = gitApi(workspaceFolderPath);
 
-        gitContext.status((err, status) => {
-            if (err) {
-                return deferred.reject(err);
-            }
+    const checkStatus = async targetBranch => {
+        const status = await gitContext.status();
 
-            const currentBranch = status.current;
-            const onMaster = currentBranch === targetBranch;
-            const isConflicted = status.conflicted.length > 0;
-            const cleanBranch = status.created.length === 0 &&
-                                status.deleted.length === 0 &&
-                                status.modified.length === 0 &&
-                                status.not_added.length === 0 &&
-                                status.renamed.length === 0;
+        const currentBranch = status.current;
+        const onMaster = currentBranch === targetBranch;
+        const isConflicted = status.conflicted.length > 0;
+        const cleanBranch = status.created.length === 0 &&
+                            status.deleted.length === 0 &&
+                            status.modified.length === 0 &&
+                            status.not_added.length === 0 &&
+                            status.renamed.length === 0;
 
-            if (isConflicted) {
-                return deferred.reject(new Error('Unresolved conflicts, please resolve before opening MR.'));
-            }
+        assert(!isConflicted, 'Unresolved conflicts, please resolve before opening MR.');
 
-            deferred.resolve({
-                currentBranch,
-                onMaster,
-                cleanBranch
-            });
-        });
-
-        return deferred.promise;
+        return {
+            currentBranch,
+            onMaster,
+            cleanBranch
+        };
     };
 
-    const lastCommitMessage = () => {
-        const deferred = Q.defer();
+    const lastCommitMessage = async () => {
+        const log = await gitContext.log();
 
-        gitContext.log((err, log) => {
-            if (err) {
-                return deferred.reject(err);
-            }
+        const message = log.latest ? log.latest.message : '';
 
-            const message = log.latest ? log.latest.message : '';
-
-            // Commit messages are suffixed with message starting with '(HEAD -> )'
-            deferred.resolve(message.split('(HEAD')[0].trim());
-        });
-
-        return deferred.promise;
+        // Commit messages are suffixed with message starting with '(HEAD -> )'
+        return message.split('(HEAD')[0].trim();
     };
 
-    const parseRemotes = targetRemote => {
-        const deferred = Q.defer();
+    const parseRemotes = async targetRemote => {
+        const remotes = await gitContext.getRemotes(true);
 
-        gitContext.getRemotes(true, (err, remotes) => {
-            // Remote error checking
-            if (err) {
-                return deferred.reject(new Error(err));
-            }
+        assert(remotes && remotes.length, 'No remotes configured.');
 
-            if (!remotes || remotes.length < 1) {
-                return deferred.reject(new Error('No remotes configured.'));
-            }
+        // Determine which Gitlab server this repo uses
+        const remote = remotes.find(remote => remote.name === targetRemote);
 
-            // Determine which Gitlab server this repo uses
-            const remote = remotes.find(remote => remote.name === targetRemote);
-            if (!remote) {
-                return deferred.reject(new Error(`Target remote ${targetRemote} does not exist.`));
-            }
+        assert(remote, `Target remote ${targetRemote} does not exist.`);
 
-            // Parse repo host and tokens
-            const repoUrl = remote.refs.push;
+        // Parse repo host and tokens
+        const repoUrl = remote.refs.push;
 
-            const parsedRemote = gitUtils.parseRepoUrl(repoUrl);
+        const parsedRemote = gitUtils.parseRepoUrl(repoUrl);
 
-            deferred.resolve(parsedRemote);
-        });
-
-        return deferred.promise;
+        return parsedRemote;
     };
 
-    const createBranch = branchName => {
-        const deferred = Q.defer();
+    const createBranch = branchName => gitContext.checkout(['-b', branchName]);
 
-        gitContext.checkout(['-b', branchName], err => {
-            if (err) {
-                return deferred.reject(new Error(err));
-            }
+    const checkoutBranch = args => gitContext.checkout(args);
 
-            deferred.resolve();
-        });
+    const addFiles = files => gitContext.add(files);
 
-        return deferred.promise;
-    };
+    const commitFiles = commitMessage => gitContext.commit(commitMessage);
 
-    const checkoutBranch = args => {
-        const deferred = Q.defer();
+    const pushBranch = (targetRemote, branchName) => gitContext.push(['-u', targetRemote, branchName]);
 
-        gitContext.checkout(args, err => {
-            if (err) {
-                return deferred.reject(new Error(err));
-            }
+    const fetchRemote = (targetRemote, branchName) => gitContext.fetch(targetRemote, branchName);
 
-            deferred.resolve();
-        });
-
-        return deferred.promise;
-    };
-
-    const addFiles = files => {
-        const deferred = Q.defer();
-
-        gitContext.add(files, err => {
-            if (err) {
-                return deferred.reject(new Error(err));
-            }
-
-            deferred.resolve();
-        });
-
-        return deferred.promise;
-    };
-
-    const commitFiles = commitMessage => {
-        const deferred = Q.defer();
-
-        gitContext.commit(commitMessage, err => {
-            if (err) {
-                return deferred.reject(new Error(err));
-            }
-
-            return deferred.resolve();
-        });
-
-        return deferred.promise;
-    };
-
-    const pushBranch = (targetRemote, branchName) => {
-        const deferred = Q.defer();
-
-        gitContext.push(['-u', targetRemote, branchName], err => {
-            if (err) {
-                return deferred.reject(new Error(err));
-            }
-
-            return deferred.resolve();
-        });
-
-        return deferred.promise;
-    };
-
-    const fetchRemote = (targetRemote, branchName) => {
-        const deferred = Q.defer();
-
-        gitContext.fetch(targetRemote, branchName, err => {
-            if (err) {
-                return deferred.reject(new Error(err));
-            }
-
-            return deferred.resolve();
-        });
-
-        return deferred.promise;
-    };
-
-    const listBranches = () => {
-        const deferred = Q.defer();
-
-        gitContext.branch((err, branches) => {
-            if (err) {
-                return deferred.reject(new Error(err));
-            }
-
-            return deferred.resolve(branches);
-        });
-
-        return deferred.promise;
-    };
+    const listBranches = () => gitContext.branch();
 
     return {
         checkStatus,

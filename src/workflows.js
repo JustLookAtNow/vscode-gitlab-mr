@@ -1,7 +1,6 @@
 const vscode = require('vscode');
 const open = require('opn');
 const url = require('url');
-const gitApi = require('simple-git');
 
 const gitActions = require('./git');
 const gitlabActions = require('./gitlab');
@@ -90,7 +89,7 @@ const buildGitlabContext = async workspaceFolderPath => {
     });
 };
 
-const buildGitContext = workspaceFolderPath => gitActions(gitApi(workspaceFolderPath));
+const buildGitContext = workspaceFolderPath => gitActions(workspaceFolderPath);
 
 const openMR = async () => {
     const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
