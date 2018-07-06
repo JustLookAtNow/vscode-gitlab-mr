@@ -279,7 +279,8 @@ const listMRs = async workspaceFolderPath => {
 
     const selected = await vscode.window.showQuickPick(mrList, {
         matchOnDescription: true,
-        placeHolder: 'Select MR'
+        placeHolder: 'Select MR',
+        ignoreFocusOut: true
     });
 
     if (selected) {
@@ -295,7 +296,7 @@ const viewMR = async () => {
 
     const mr = await listMRs(workspaceFolder.uri.fsPath);
     if (!mr) {
-        return showErrorMessage('MR not selected.');
+        return;
     }
 
     open(mr.web_url);
@@ -314,7 +315,7 @@ const checkoutMR = async () => {
 
     const mr = await listMRs(workspaceFolderPath);
     if (!mr) {
-        return showErrorMessage('MR not selected.');
+        return;
     }
 
     const git = buildGitContext(workspaceFolderPath);
