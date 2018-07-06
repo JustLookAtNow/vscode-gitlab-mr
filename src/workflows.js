@@ -41,7 +41,8 @@ const selectWorkspaceFolder = async () => {
             label: folder.name,
             folder
         })), {
-            placeHolder: 'Select workspace folder'
+            placeHolder: 'Select workspace folder',
+            ignoreFocusOut: true
         });
 
         if (selected) {
@@ -348,7 +349,8 @@ const checkoutMR = async () => {
 
 const searchUsers = async gitlab => {
     const search = await vscode.window.showInputBox({
-        placeHolder: 'Search for user...'
+        placeHolder: 'Search for user...',
+        ignoreFocusOut: true
     });
 
     if (search) {
@@ -403,7 +405,8 @@ const editMR = async () => {
     };
 
     const selected = await vscode.window.showQuickPick(Object.values(editCommands), {
-        placeHolder: 'Select an action...'
+        placeHolder: 'Select an action...',
+        ignoreFocusOut: true
     });
 
     const showGitlabError = e => {
