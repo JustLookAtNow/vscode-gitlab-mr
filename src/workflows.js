@@ -2,7 +2,6 @@ const vscode = require('vscode');
 const open = require('opn');
 const url = require('url');
 const gitApi = require('simple-git');
-const Q = require('q');
 
 const gitActions = require('./git');
 const gitlabActions = require('./gitlab');
@@ -92,7 +91,7 @@ const buildGitlabContext = async workspaceFolderPath => {
 
 const buildGitContext = workspaceFolderPath => gitActions(gitApi(workspaceFolderPath));
 
-const openMR = () => {
+const openMR = async () => {
     const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
 
     // Target branch and remote
@@ -107,153 +106,148 @@ const openMR = () => {
     // Remove source branch
     const removeSourceBranch = preferences.get('removeSourceBranch', false);
 
-    return selectWorkspaceFolder()
-        .then(workSpaceFolder => {
-            if (!workSpaceFolder) {
-                return;
+    // Pick workspace
+    const workspaceFolder = await selectWorkspaceFolder();
+    if (!workspaceFolder) {
+        return;
+    }
+
+    const workspaceFolderPath = workspaceFolder.uri.fsPath;
+
+    // Set git context
+    const git = buildGitContext(workspaceFolderPath);
+
+    const gitlab = await buildGitlabContext(workspaceFolderPath);
+    const useDefaultBranch = preferences.get('useDefaultBranch', false);
+
+    const targetBranch = useDefaultBranch ?
+        await gitlab.getRepo().then(repo => repo.default_branch) :
+        preferences.get('targetBranch', 'master');
+
+    const {
+        currentBranch,
+        onMaster,
+        cleanBranch
+    } = await git.checkStatus(targetBranch);
+
+    const lastCommitMessage = await git.lastCommitMessage();
+
+    // Prompt user for branch and commit message
+    const branch = await vscode.window.showInputBox({
+        prompt: 'Branch Name:',
+        value: onMaster ? '' : currentBranch,
+        ignoreFocusOut: true
+    });
+
+    // Validate branch name
+    if (branch === '') {
+        return showErrorMessage('Branch name must be provided.');
+    }
+
+    if (!branch) {
+        return;
+    }
+
+    if (branch.indexOf(' ') > -1) {
+        return showErrorMessage('Branch name must not contain spaces.');
+    }
+
+    if (branch === targetBranch) {
+        return showErrorMessage(`Branch name cannot be the default branch name (${targetBranch}).`);
+    }
+
+    // Prompt for commit message/mr title
+    const commitMessage = await vscode.window.showInputBox({
+        prompt: 'Commit Message:',
+        value: cleanBranch ? lastCommitMessage : '',
+        ignoreFocusOut: true
+    });
+
+    // Validate commit message
+    if (!commitMessage === '') {
+        return showErrorMessage('Commit message must be provided.');
+    }
+
+    if (!commitMessage) {
+        return;
+    }
+
+    const buildStatus = vscode.window.setStatusBarMessage(message(`Building MR to ${targetBranch} from ${branch}...`));
+
+    // Build up chain of git commands to run
+    let gitPromises;
+    if (onMaster || (!onMaster && currentBranch !== branch)) {
+        if (cleanBranch) {
+            // On master, clean: create and push branch
+            gitPromises = git.createBranch(branch)
+                .then(() => git.pushBranch(targetRemote, branch));
+        } else {
+            // On master, not clean: create branch, commit, push branch
+            gitPromises = git.createBranch(branch)
+                .then(() => git.addFiles('./*'))
+                .then(() => git.commitFiles(commitMessage))
+                .then(() => git.pushBranch(targetRemote, branch));
+        }
+    } else {
+        if (cleanBranch) {
+            // Not on master, clean: push branch
+            gitPromises = git.pushBranch(targetRemote, branch);
+        } else {
+            // Not on master, not clean: Commit, push branch
+            gitPromises = git.addFiles('./*')
+                .then(() => git.commitFiles(commitMessage))
+                .then(() => git.pushBranch(targetRemote, branch));
+        }
+    }
+
+    await gitPromises
+        .catch(err => {
+            buildStatus.dispose();
+
+            throw err;
+        });
+
+    return gitlab.openMr(branch, targetBranch, commitMessage, removeSourceBranch)
+        .then(mr => {
+            // Success message and prompt
+            const successMessage = message(`MR !${mr.iid} created.`);
+            const successButton = 'Open MR';
+
+            buildStatus.dispose();
+            vscode.window.setStatusBarMessage(successMessage, STATUS_TIMEOUT);
+
+            const mrWebUrl = `${mr.web_url}${openToEdit ? '/edit': ''}`;
+
+            if (autoOpenMr) {
+                open(mrWebUrl);
+                return vscode.window.showInformationMessage(successMessage);
             }
 
-            const workspaceFolderPath = workSpaceFolder.uri.fsPath;
+            return vscode.window.showInformationMessage(successMessage, successButton).then(selected => {
+                switch (selected) {
+                    case successButton: {
+                        open(mrWebUrl);
+                        break;
+                    }
+                }
+            });
+        })
+        .catch(() => {
+            buildStatus.dispose();
 
-            // Set git context
-            const git = buildGitContext(workspaceFolderPath);
+            // Build url to create MR from web ui
+            const gitlabNewMrUrl = gitlab.buildMrUrl(branch, targetBranch);
 
-            // Check repo status
-            return buildGitlabContext(workspaceFolderPath)
-                .then(gitlab => {
-                    return Q.fcall(() => {
-                        const useDefaultBranch = preferences.get('useDefaultBranch', false);
+            const createButton = 'Create on Gitlab';
 
-                        if (useDefaultBranch) {
-                            return gitlab.getRepo()
-                                .then(repo => {
-                                    return repo.default_branch;
-                                });
-                        }
-
-                        return preferences.get('targetBranch', 'master');
-                    })
-                        .then(targetBranch => {
-                            return git.checkStatus(targetBranch)
-                                .then(status => {
-                                    const currentBranch = status.currentBranch;
-                                    const onMaster = status.onMaster;
-                                    const cleanBranch = status.cleanBranch;
-
-                                    return git.lastCommitMessage()
-                                        .then(lastCommitMessage => {
-                                            // Prompt user for branch and commit message
-                                            return vscode.window.showInputBox({
-                                                prompt: 'Branch Name:',
-                                                value: onMaster ? '' : currentBranch
-                                            })
-                                                .then(branch => {
-                                                    // Validate branch name
-                                                    if (!branch) {
-                                                        return showErrorMessage('Branch name must be provided.');
-                                                    }
-
-                                                    if (branch.indexOf(' ') > -1) {
-                                                        return showErrorMessage('Branch name must not contain spaces.');
-                                                    }
-
-                                                    if (branch === targetBranch) {
-                                                        return showErrorMessage(`Branch name cannot be the default branch name (${targetBranch}).`);
-                                                    }
-
-                                                    return vscode.window.showInputBox({
-                                                        prompt: 'Commit Message:',
-                                                        value: cleanBranch ? lastCommitMessage : ''
-                                                    })
-                                                        .then(commitMessage => {
-                                                            // Validate commit message
-                                                            if (!commitMessage) {
-                                                                return showErrorMessage('Commit message must be provided.');
-                                                            }
-
-                                                            const buildStatus = vscode.window.setStatusBarMessage(message(`Building MR to ${targetBranch} from ${branch}...`));
-
-                                                            var gitPromises;
-                                                            if (onMaster || (!onMaster && currentBranch !== branch)) {
-                                                                if (cleanBranch) {
-                                                                    // On master, clean: create and push branch
-                                                                    gitPromises = git.createBranch(branch)
-                                                                        .then(() => git.pushBranch(targetRemote, branch));
-                                                                } else {
-                                                                    // On master, not clean: create branch, commit, push branch
-                                                                    gitPromises = git.createBranch(branch)
-                                                                        .then(() => git.addFiles('./*'))
-                                                                        .then(() => git.commitFiles(commitMessage))
-                                                                        .then(() => git.pushBranch(targetRemote, branch));
-                                                                }
-                                                            } else {
-                                                                if (cleanBranch) {
-                                                                    // Not on master, clean: push branch
-                                                                    gitPromises = git.pushBranch(targetRemote, branch);
-                                                                } else {
-                                                                    // Not on master, not clean: Commit, push branch
-                                                                    gitPromises = git.addFiles('./*')
-                                                                        .then(() => git.commitFiles(commitMessage))
-                                                                        .then(() => git.pushBranch(targetRemote, branch));
-                                                                }
-                                                            }
-
-                                                            gitPromises.catch(err => {
-                                                                buildStatus.dispose();
-
-                                                                showErrorMessage(err.message);
-                                                            });
-
-                                                            return gitPromises.then(() => {
-                                                                return gitlab.openMr(branch, targetBranch, commitMessage, removeSourceBranch)
-                                                                    .then(mr => {
-                                                                        // Success message and prompt
-                                                                        const successMessage = message(`MR !${mr.iid} created.`);
-                                                                        const successButton = 'Open MR';
-
-                                                                        buildStatus.dispose();
-                                                                        vscode.window.setStatusBarMessage(successMessage, STATUS_TIMEOUT);
-
-                                                                        const mrWebUrl = `${mr.web_url}${openToEdit ? '/edit': ''}`;
-
-                                                                        if (autoOpenMr) {
-                                                                            open(mrWebUrl);
-                                                                            return vscode.window.showInformationMessage(successMessage);
-                                                                        }
-
-                                                                        return vscode.window.showInformationMessage(successMessage, successButton).then(selected => {
-                                                                            switch (selected) {
-                                                                                case successButton: {
-                                                                                    open(mrWebUrl);
-                                                                                    break;
-                                                                                }
-                                                                            }
-                                                                        });
-                                                                    })
-                                                                    .catch(() => {
-                                                                        buildStatus.dispose();
-
-                                                                        // Build url to create MR from web ui
-                                                                        const gitlabNewMrUrl = gitlab.buildMrUrl(branch, targetBranch);
-
-                                                                        const createButton = 'Create on Gitlab';
-
-                                                                        vscode.window.setStatusBarMessage(ERROR_STATUS, STATUS_TIMEOUT);
-                                                                        vscode.window.showErrorMessage(ERROR_STATUS, createButton).then(selected => {
-                                                                            switch (selected) {
-                                                                                case createButton:
-                                                                                    open(gitlabNewMrUrl);
-                                                                                    break;
-                                                                            }
-                                                                        });
-                                                                    });
-                                                            });
-                                                        });
-                                                });
-                                        });
-                                });
-                        });
-                });
+            vscode.window.setStatusBarMessage(ERROR_STATUS, STATUS_TIMEOUT);
+            vscode.window.showErrorMessage(ERROR_STATUS, createButton).then(selected => {
+                switch (selected) {
+                    case createButton:
+                        open(gitlabNewMrUrl);
+                        break;
+                }
+            });
         });
 };
 
