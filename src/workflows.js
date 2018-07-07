@@ -94,16 +94,10 @@ const buildGitContext = workspaceFolderPath => gitActions(workspaceFolderPath);
 const openMR = async () => {
     const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
 
-    // Target branch and remote
     const targetRemote = preferences.get('targetRemote', 'origin');
-
-    // Auto-open MR
+    const autoCommitChanges = preferences.get('autoCommitChanges', false);
     const autoOpenMr = preferences.get('autoOpenMr', false);
-
-    // Open to edit screen
     const openToEdit = preferences.get('openToEdit', false);
-
-    // Remove source branch
     const removeSourceBranch = preferences.get('removeSourceBranch', false);
 
     // Pick workspace
@@ -157,45 +151,59 @@ const openMR = async () => {
     }
 
     // Prompt for commit message/mr title
-    const commitMessage = await vscode.window.showInputBox({
-        prompt: 'Commit Message:',
+    const mrTitle = await vscode.window.showInputBox({
+        prompt: 'MR Title:',
         value: cleanBranch ? lastCommitMessage : '',
         ignoreFocusOut: true
     });
 
     // Validate commit message
-    if (!commitMessage === '') {
-        return showErrorMessage('Commit message must be provided.');
+    if (!mrTitle === '') {
+        return showErrorMessage('MR title must be provided.');
     }
 
-    if (!commitMessage) {
+    if (!mrTitle) {
         return;
     }
 
     const buildStatus = vscode.window.setStatusBarMessage(message(`Building MR to ${targetBranch} from ${branch}...`));
 
+    // If the branch is not clean, and autoCommitChanges is false,
+    // prompt user if they want to commit changes.
+    // Otherwise, commit changes.
+    const commitChanges = !cleanBranch && !autoCommitChanges ? (
+        await vscode.window.showQuickPick([
+            { label: 'Yes', value: true },
+            { label: 'No', value: false }
+        ], {
+            placeHolder: 'Commit current changes?',
+            ignoreFocusOut: true
+        })
+            .then(selection => selection && selection.value)
+    ) : true;
+
+    if (commitChanges === undefined) {
+        return;
+    }
+
     // Build up chain of git commands to run
     let gitPromises;
     if (onMaster || (!onMaster && currentBranch !== branch)) {
-        if (cleanBranch) {
-            // On master, clean: create and push branch
+        if (cleanBranch || !commitChanges) {
             gitPromises = git.createBranch(branch)
                 .then(() => git.pushBranch(targetRemote, branch));
         } else {
-            // On master, not clean: create branch, commit, push branch
             gitPromises = git.createBranch(branch)
                 .then(() => git.addFiles('./*'))
-                .then(() => git.commitFiles(commitMessage))
+                .then(() => git.commitFiles(mrTitle))
                 .then(() => git.pushBranch(targetRemote, branch));
         }
     } else {
-        if (cleanBranch) {
-            // Not on master, clean: push branch
+        if (cleanBranch || !commitChanges) {
             gitPromises = git.pushBranch(targetRemote, branch);
         } else {
-            // Not on master, not clean: Commit, push branch
             gitPromises = git.addFiles('./*')
-                .then(() => git.commitFiles(commitMessage))
+                .then(() => git.commitFiles(mrTitle))
                 .then(() => git.pushBranch(targetRemote, branch));
         }
     }
@@ -207,9 +215,8 @@ const openMR = async () => {
             throw err;
         });
 
-    return gitlab.openMr(branch, targetBranch, commitMessage, removeSourceBranch)
+    return gitlab.openMr(branch, targetBranch, mrTitle, removeSourceBranch)
         .then(mr => {
-            // Success message and prompt
             const successMessage = message(`MR !${mr.iid} created.`);
             const successButton = 'Open MR';
 
@@ -235,7 +242,6 @@ const openMR = async () => {
         .catch(() => {
             buildStatus.dispose();
 
-            // Build url to create MR from web ui
             const gitlabNewMrUrl = gitlab.buildMrUrl(branch, targetBranch);
 
             const createButton = 'Create on Gitlab';
@@ -254,7 +260,6 @@ const openMR = async () => {
 const listMRs = async workspaceFolderPath => {
     const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
 
-    // Target branch and remote
     const targetBranch = preferences.get('targetBranch', 'master');
 
     const gitlab = await buildGitlabContext(workspaceFolderPath);

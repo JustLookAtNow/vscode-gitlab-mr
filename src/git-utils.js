@@ -1,6 +1,7 @@
 const sshParse = require('ssh-parse');
 const url = require('url');
 const trimStart = require('lodash.trimstart');
+const assert = require('assert');
 
 const parseRepoUrl = repoUrl => {
     const parsedRepoUrl = url.parse(repoUrl);
@@ -21,15 +22,11 @@ const parseRepoUrl = repoUrl => {
 const parseRepoProtocol = (repoHost, gitlabHosts) => {
     const urlForHost = gitlabHosts.find(gitlabHost => url.parse(gitlabHost).hostname === repoHost || gitlabHost === repoHost);
 
-    if (!urlForHost) {
-        throw new Error(`gitlab-mr.accessTokens does not contain an entry for ${repoHost} (e.g. gitlab-mr.accessTokens["https://${repoHost}"]).`);
-    }
+    assert(urlForHost, `gitlab-mr.accessTokens does not contain an entry for ${repoHost} (e.g. gitlab-mr.accessTokens["https://${repoHost}"]).`);
 
     const parsedUrl = url.parse(urlForHost);
 
-    if (!parsedUrl.protocol) {
-        throw new Error(`gitlab-mr.accessTokens["${repoHost}"] must have a protocol (e.g. gitlab-mr.accessTokens["https://${repoHost}"]).`);
-    }
+    assert(parsedUrl.protocol, `gitlab-mr.accessTokens["${repoHost}"] must have a protocol (e.g. gitlab-mr.accessTokens["https://${repoHost}"]).`);
 
     return parsedUrl.protocol;
 };

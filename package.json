@@ -103,6 +103,11 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Open a new MR to the edit screen after creation."
+                },
+                "gitlab-mr.autoCommitChanges": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Auto-commit current changes when creating an MR"
                 }
             }
         }
