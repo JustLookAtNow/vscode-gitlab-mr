@@ -15,12 +15,14 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         fullResponse: false
     });
 
+    // https://docs.gitlab.com/ee/api/projects.html#get-single-project
     const getRepo = () => {
         return gitlab.get({
             url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}`
         });
     };
 
+    // https://docs.gitlab.com/ee/api/merge_requests.html#create-mr
     const openMr = (branchName, targetBranch, commitMessage, removeSourceBranch) => {
         return gitlab.post({
             url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests`,
@@ -34,6 +36,7 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         });
     };
 
+    // https://docs.gitlab.com/ee/api/merge_requests.html#list-merge-requests
     const listMrs = () => {
         return gitlab.get({
             url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests`,
@@ -48,6 +51,7 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
             });
     };
 
+    // https://docs.gitlab.com/ee/api/users.html#for-normal-users
     const searchUsers = search => {
         return gitlab.get({
             url: `/api/${apiVersion}/users`,
@@ -58,7 +62,7 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         });
     };
 
-    // https://gitlab.com/gitlab-org/gitlab-ce/blob/8-16-stable/doc/api/merge_requests.md#update-mr
+    // https://docs.gitlab.com/ee/api/merge_requests.html#update-mr
     const editMr = (mergeRequestId, body) => {
         return gitlab.put({
             url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests/${mergeRequestId}`,
