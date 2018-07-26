@@ -115,7 +115,8 @@
     "scripts": {
         "postinstall": "node ./node_modules/vscode/bin/install",
         "lint": "eslint .",
-        "test": "mocha"
+        "test": "mocha",
+        "package": "vsce package -o ./bin/vscode-gitlab-mr.vsix --baseContentUrl https://gitlab.com/jasonnutter/vscode-gitlab-mr/tree/master --baseImagesUrl https://gitlab.com/jasonnutter/vscode-gitlab-mr/raw/master"
     },
     "pre-commit": [
         "lint",
