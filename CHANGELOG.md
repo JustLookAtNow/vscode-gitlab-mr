@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 1.4.0
+
+* Added: Support for multi-root workspaces.
+* Added: `gitlab-mr.openToEdit` to open to MR edit screen.
+* Added: Edit MR feature, which allows editing of MR title, WIP, assignee, and approvers.
+* Added: `gitlab-mr.useDefaultBranch` to use default branch set in repository as the target branch for MRs.
+* Added: `gitlab-mr.autoCommitChanges` to control whether or not uncommitted changes are automatically staged and committed as part of the MR.
+* Fixed: Switch to Gitlab API v4, and `gitlab-mr.apiVersion` in case v3 APIs are needed (this is not fully supported, but was added just in case someone needs it).
+
 ## 1.3.0
 
 * Added: `gitlab-mr.removeSourceBranch` to set the source branch to be deleted when the MR is merged.
