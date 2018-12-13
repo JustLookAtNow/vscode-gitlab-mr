@@ -22,9 +22,9 @@ Create an MR from VS Code by providing a branch name and commit message.
 
 1. Open the command palette and select **Gitlab MR: Create MR**.
 2. First, input the name of the branch you want created for this MR. If you are not on your default branch, the current branch name will be autofilled (providing a different branch name will result in a new branch).
-3. Next, provide the commit message for the changes. If the branch is clean, the last commit message will be autofilled (providing a different commit message will only impact the MR).
+3. Next, provide the commit message for the changes. If nothing is being committed, the last commit message will be autofilled (providing a different commit message will only impact the MR).
 4. If the new branch is different from your current branch, the new branch will be created and checked out.
-5. If the current branch has uncommitted changes, all changed files will be committed with the provided commit message.
+5. If the current branch has uncommitted changes, you will be asked if you want to commit the uncommited changes.
 6. The branch will be pushed to the remote specified as `gitlab-mr.targetRemote` (defaults to `origin`).
 7. An MR will be created to the branch specified as `gitlab-mr.targetBranch` (defaults to `master`) from the new branch.
 8. A message will be shown in VS Code with a link to the MR.

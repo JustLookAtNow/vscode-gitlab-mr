@@ -150,22 +150,6 @@ const openMR = async () => {
         return showErrorMessage(`Branch name cannot be the default branch name (${targetBranch}).`);
     }
 
-    // Prompt for commit message/mr title
-    const mrTitle = await vscode.window.showInputBox({
-        prompt: 'MR Title:',
-        value: cleanBranch ? lastCommitMessage : '',
-        ignoreFocusOut: true
-    });
-
-    // Validate commit message
-    if (!mrTitle === '') {
-        return showErrorMessage('MR title must be provided.');
-    }
-
-    if (!mrTitle) {
-        return;
-    }
-
     const buildStatus = vscode.window.setStatusBarMessage(message(`Building MR to ${targetBranch} from ${branch}...`));
 
     // If the branch is not clean, and autoCommitChanges is false,
@@ -183,6 +167,22 @@ const openMR = async () => {
     ) : true;
 
     if (commitChanges === undefined) {
+        return;
+    }
+
+    // Prompt for commit message/mr title
+    const mrTitle = await vscode.window.showInputBox({
+        prompt: commitChanges ? 'Commit message / MR Title:' : 'MR Title:',
+        value: commitChanges ? '' : lastCommitMessage,
+        ignoreFocusOut: true
+    });
+
+    // Validate commit message
+    if (!mrTitle === '') {
+        return showErrorMessage('MR title must be provided.');
+    }
+
+    if (!mrTitle) {
         return;
     }
 
