@@ -82,12 +82,12 @@
                 "gitlab-mr.autoOpenMr": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Automatically open a new MR."
+                    "description": "Open newly created MRs in your browser."
                 },
                 "gitlab-mr.removeSourceBranch": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Remove source branch after merging."
+                    "description": "When creating MRs, enable the option to remove the source branch after merging."
                 },
                 "gitlab-mr.useDefaultBranch": {
                     "type": "boolean",
@@ -102,7 +102,7 @@
                 "gitlab-mr.openToEdit": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Open a new MR to the edit screen after creation."
+                    "description": "Open and edit newly created MRs in your browser."
                 },
                 "gitlab-mr.autoCommitChanges": {
                     "type": "boolean",
