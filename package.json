@@ -2,7 +2,7 @@
     "name": "gitlab-mr",
     "displayName": "Gitlab MR",
     "description": "Manage MRs in Gitlab from VS Code",
-    "version": "1.4.1",
+    "version": "1.4.2",
     "publisher": "jasonn-porch",
     "engines": {
         "vscode": "^1.5.0"
