@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 1.4.1
+## 1.4.2
 
 * Fixed: Moved the MR title prompt after the commit prompt, which allows the commit message to be auto-populated even if the repo is dirty (thanks @GreenGremlin for [the contribution](https://gitlab.com/jasonnutter/vscode-gitlab-mr/merge_requests/28)!).
 
