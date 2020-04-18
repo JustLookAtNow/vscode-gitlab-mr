@@ -1,6 +1,7 @@
 const request = require('request-promise');
 const assert = require('assert');
 const vscode = require('vscode');
+const urlModule = require('url');
 
 module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
     const preferences = vscode.workspace.getConfiguration('gitlab-mr');
@@ -86,7 +87,7 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
     };
 
     const buildMrUrl = (branch, targetBranch) => {
-        return url.format({
+        return urlModule.format({
             protocol: repoWebProtocol,
             host: repoHost,
             pathname: `${repoId}/merge_requests/new`,
