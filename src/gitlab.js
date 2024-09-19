@@ -98,12 +98,22 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
         });
     };
 
+    
+    const buildExistMrUrl = mrId => {
+        return urlModule.format({
+            protocol: repoWebProtocol,
+            host: repoHost,
+            pathname: `${repoId}/merge_requests/${mrId}`
+        });
+    };
+
     return {
         getRepo,
         openMr,
         listMrs,
         editMr,
         buildMrUrl,
+        buildExistMrUrl,
         searchUsers,
         getApprovals,
         editApprovers

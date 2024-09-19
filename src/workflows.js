@@ -100,6 +100,8 @@ const openMR = async () => {
     const openToEdit = preferences.get('openToEdit', false);
     const removeSourceBranch = preferences.get('removeSourceBranch', false);
 
+    // 获取并设置默认分支
+    let targetBranch = preferences.get('targetBranch', 'master');
     // Pick workspace
     const workspaceFolder = await selectWorkspaceFolder();
     if (!workspaceFolder) {
@@ -112,26 +114,15 @@ const openMR = async () => {
     const git = buildGitContext(workspaceFolderPath);
 
     const gitlab = await buildGitlabContext(workspaceFolderPath);
-    const useDefaultBranch = preferences.get('useDefaultBranch', false);
 
-    const targetBranch = useDefaultBranch ?
-        await gitlab.getRepo().then(repo => repo.default_branch) :
-        preferences.get('targetBranch', 'master');
-
-    const {
-        currentBranch,
-        onMaster,
-        cleanBranch
-    } = await git.checkStatus(targetBranch);
-
-    const lastCommitMessage = await git.lastCommitMessage();
+    const currentBranch = await git.getCurrentBranch();
 
     // Prompt user for branch and commit message
     const branch = await vscode.window.showInputBox({
-        prompt: 'Branch Name:',
-        value: onMaster ? '' : currentBranch,
+        prompt: 'Input origin branch Name:',
+        value: currentBranch,
         ignoreFocusOut: true
-    });
+    }).then(branch => branch.trim());
 
     // Validate branch name
     if (branch === '') {
@@ -146,9 +137,40 @@ const openMR = async () => {
         return showErrorMessage('Branch name must not contain spaces.');
     }
 
-    if (branch === targetBranch) {
-        return showErrorMessage(`Branch name cannot be the default branch name (${targetBranch}).`);
+    const {onMaster,cleanBranch} = await git.checkStatus(branch);
+
+    const useDefaultBranch = preferences.get('useDefaultBranch', false);
+
+    if (useDefaultBranch) {
+        targetBranch = await gitlab.getRepo().then(repo => repo.default_branch);
+    } else {
+        const branchSummary = await git.listBranches(targetRemote);
+        const branchOptions = Object.keys(branchSummary.branches).map(branch => ({
+            label: branchSummary.branches[branch].name,
+            description: `远程分支: ${branchSummary.branches[branch].name}`
+        }));
+
+        const selectedBranch = await vscode.window.showQuickPick([
+            { label: targetBranch, description: 'last use' },
+            ...branchOptions
+        ], {
+            placeHolder: '选择或输入目标分支名称:',
+            value: targetBranch,
+            matchOnDescription: true,
+            ignoreFocusOut: true
+        });
+
+        if (!selectedBranch) {
+            return showErrorMessage('必须提供目标分支名称。');
+        }
+
+        targetBranch = selectedBranch.label;
     }
+    if (branch === targetBranch) {
+        return showErrorMessage(`Target branch name cannot be same with origin branch (${targetBranch}).`);
+    }
+
+    const lastCommitMessage = await git.lastCommitMessage();
 
     const buildStatus = vscode.window.setStatusBarMessage(message(`Building MR to ${targetBranch} from ${branch}...`));
 
@@ -173,12 +195,12 @@ const openMR = async () => {
     // Prompt for commit message/mr title
     const mrTitle = await vscode.window.showInputBox({
         prompt: commitChanges ? 'Commit message / MR Title:' : 'MR Title:',
-        value: commitChanges ? '' : lastCommitMessage,
+        value:  lastCommitMessage,
         ignoreFocusOut: true
     });
 
     // Validate commit message
-    if (!mrTitle === '') {
+    if (mrTitle === '') {
         return showErrorMessage('MR title must be provided.');
     }
 
@@ -188,7 +210,7 @@ const openMR = async () => {
 
     // Build up chain of git commands to run
     let gitPromises;
-    if (onMaster || (!onMaster && currentBranch !== branch)) {
+    if (!onMaster) {
         if (cleanBranch || !commitChanges) {
             gitPromises = git.createBranch(branch)
                 .then(() => git.pushBranch(targetRemote, branch));
@@ -217,6 +239,9 @@ const openMR = async () => {
 
     return gitlab.openMr(branch, targetBranch, mrTitle, removeSourceBranch)
         .then(mr => {
+            // 更新配置中的 targetBranch
+            preferences.update('targetBranch', targetBranch, vscode.ConfigurationTarget.Global);
+
             const successMessage = message(`MR !${mr.iid} created.`);
             const successButton = 'Open MR';
 
@@ -226,31 +251,40 @@ const openMR = async () => {
             const mrWebUrl = `${mr.web_url}${openToEdit ? '/edit': ''}`;
 
             if (autoOpenMr) {
-                open(mrWebUrl);
+                vscode.env.openExternal(vscode.Uri.parse(mrWebUrl));
                 return vscode.window.showInformationMessage(successMessage);
             }
 
             return vscode.window.showInformationMessage(successMessage, successButton).then(selected => {
                 switch (selected) {
                     case successButton: {
-                        open(mrWebUrl);
+                        vscode.env.openExternal(vscode.Uri.parse(mrWebUrl));
                         break;
                     }
                 }
             });
         })
-        .catch(() => {
+        .catch(err => {
+            // showErrorMessage(err.message);
             buildStatus.dispose();
 
-            const gitlabNewMrUrl = gitlab.buildMrUrl(branch, targetBranch);
+            let mrUrl = gitlab.buildMrUrl(branch, targetBranch);
 
-            const createButton = 'Create on Gitlab';
+            let createButton = 'Create on Gitlab';
 
+            if (err.statusCode === 409) {
+                // 重复创建
+                createButton = 'Open exist MR on Gitlab';
+                // 从错误消息中提取 MR ID
+                const mrId = err.message.match(/!(\d+)/)[1];
+                mrUrl = gitlab.buildExistMrUrl(mrId);
+
+            }
             vscode.window.setStatusBarMessage(ERROR_STATUS, STATUS_TIMEOUT);
-            vscode.window.showErrorMessage(ERROR_STATUS, createButton).then(selected => {
+            vscode.window.showErrorMessage(err.message, createButton).then(selected => {
                 switch (selected) {
                     case createButton:
-                        open(gitlabNewMrUrl);
+                        vscode.env.openExternal(vscode.Uri.parse(mrUrl));
                         break;
                 }
             });
@@ -304,7 +338,7 @@ const viewMR = async () => {
         return;
     }
 
-    open(mr.web_url);
+    vscode.env.openExternal(vscode.Uri.parse(mr.web_url));
 };
 
 const checkoutMR = async () => {

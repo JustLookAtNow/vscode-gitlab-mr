@@ -1,15 +1,15 @@
 const gitUtils = require('./git-utils');
-const gitApi = require('simple-git/promise');
+const gitApi = require('simple-git');
 const assert = require('assert');
 
 module.exports = workspaceFolderPath => {
     const gitContext = gitApi(workspaceFolderPath);
 
-    const checkStatus = async targetBranch => {
+    const checkStatus = async originBranch => {
         const status = await gitContext.status();
 
         const currentBranch = status.current;
-        const onMaster = currentBranch === targetBranch;
+        const onMaster = currentBranch === originBranch;
         const isConflicted = status.conflicted.length > 0;
         const cleanBranch = status.created.length === 0 &&
                             status.deleted.length === 0 &&
@@ -20,10 +20,15 @@ module.exports = workspaceFolderPath => {
         assert(!isConflicted, 'Unresolved conflicts, please resolve before opening MR.');
 
         return {
-            currentBranch,
             onMaster,
             cleanBranch
         };
+    };
+
+    const getCurrentBranch = async () => {
+        const status = await gitContext.status();
+
+        return status.current;
     };
 
     const lastCommitMessage = async () => {
@@ -77,6 +82,7 @@ module.exports = workspaceFolderPath => {
         fetchRemote,
         addFiles,
         commitFiles,
-        pushBranch
+        pushBranch,
+        getCurrentBranch
     };
 };
