@@ -24,7 +24,7 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
     };
 
     // https://docs.gitlab.com/ee/api/merge_requests.html#create-mr
-    const openMr = (branchName, targetBranch, commitMessage, removeSourceBranch) => {
+    const openMr = (branchName, targetBranch, commitMessage, description, removeSourceBranch, squashCommits) => {
         return gitlab.post({
             url: `/api/${apiVersion}/projects/${encodeURIComponent(repoId)}/merge_requests`,
             body: {
@@ -32,7 +32,9 @@ module.exports = ({ url, token, repoId, repoHost, repoWebProtocol }) => {
                 source_branch: branchName,
                 target_branch: targetBranch,
                 title: commitMessage,
-                remove_source_branch: removeSourceBranch
+                description: description,
+                remove_source_branch: removeSourceBranch,
+                squash: squashCommits
             }
         });
     };

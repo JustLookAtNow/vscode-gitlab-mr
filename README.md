@@ -78,3 +78,6 @@ View an existing MR in your browser.
 * Known Issues: [https://gitlab.com/jasonnutter/vscode-gitlab-mr/issues?scope=all&state=opened&utf8=%E2%9C%93&label_name%5B%5D=Bug](https://gitlab.com/jasonnutter/vscode-gitlab-mr/issues?scope=all&state=opened&utf8=%E2%9C%93&label_name%5B%5D=Bug)
 * Change Log: [https://gitlab.com/jasonnutter/vscode-gitlab-mr/blob/master/CHANGELOG.md](https://gitlab.com/jasonnutter/vscode-gitlab-mr/blob/master/CHANGELOG.md)
 * Github Plugin: [https://github.com/jasonnutter/vscode-github-pr](https://github.com/jasonnutter/vscode-github-pr)
+
+
+添加两个新功能，assignee_ids（受让人）跟labels（标签），全部做成下拉多选，assignee_ids默认引用上一次的，每次用户可以通过输入用户名后点击回车下面列出符合条件的用户；labels没有默认值，但是旁边放个按钮，点击后刷新当前项目的标签到列表，一旦刷新过就把当前项目的标签数组存储到项目配置文件中，下次直接使用。

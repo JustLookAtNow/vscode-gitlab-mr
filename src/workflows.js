@@ -91,17 +91,332 @@ const buildGitlabContext = async workspaceFolderPath => {
 
 const buildGitContext = workspaceFolderPath => gitActions(workspaceFolderPath);
 
-const openMR = async () => {
+// 引入必要的 VSCode 模块
+const { ViewColumn } = require('vscode');
+
+// 添加一个新的函数来显示自定义表单
+const showCreateMRForm = async () => {
+    // 获取当前工作区文件夹
+    const workspaceFolder = await selectWorkspaceFolder();
+    if (!workspaceFolder) {
+        return;
+    }
+
+    const workspaceFolderPath = workspaceFolder.uri.fsPath;
+    const git = buildGitContext(workspaceFolderPath);
+    const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+    const targetRemote = preferences.get('targetRemote', 'origin');
+    
+    // 获取所有远程分支名称
+    const branchSummary = await git.listBranches(targetRemote);
+    const branches = Object.keys(branchSummary.branches).map(branch => branchSummary.branches[branch].name);
+
+    // 获取当前分支名称
+    const currentBranch = await git.getCurrentBranch();
+
+    // 获取上次使用的目标分支
+    const lastTargetBranch = preferences.get('targetBranch', 'master');
+
+    // 获取最后一次提交消息
+    const lastCommitMessage = await git.lastCommitMessage();
+
+    // 获取删除源分支的配置
+    const removeSourceBranch = preferences.get('removeSourceBranch', false);
+
+
+    const panel = vscode.window.createWebviewPanel(
+        'createMR', // 视图类型
+        '创建 Merge Request', // 标题
+        ViewColumn.One, // 显示在编辑器的哪个面板
+        {
+            enableScripts: true
+        }
+    );
+
+    // 设置 Webview 的 HTML 内容，并传递分支列表、当前分支和最后一次提交信息
+    panel.webview.html = getWebviewContent(branches, currentBranch, lastTargetBranch, lastCommitMessage, removeSourceBranch);
+
+    // 处理来自 Webview 的消息，移除 context.subscriptions
+    panel.webview.onDidReceiveMessage(async message => {
+        switch (message.command) {
+            case 'submit':
+                const { branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits } = message;
+                await openMR(branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits);
+                panel.dispose();
+                break;
+            case 'cancel':
+                panel.dispose();
+                break;
+        }
+    });
+};
+
+// 修改获取 Webview 内容的函数，添加分支的下拉菜单和预填充MR标题
+const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommitMessage, removeSourceBranch) => {
+    return `<!DOCTYPE html>
+    <html lang="zh">
+    <head>
+        <meta charset="UTF-8">
+        <title>创建 Merge Request</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f5f5f5;
+                padding: 20px;
+                margin: 0;
+            }
+            form {
+                background-color: #ffffff;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                max-width: 500px;
+                margin: auto;
+            }
+            label {
+                display: block;
+                margin-top: 15px;
+                font-weight: bold;
+                color: #333333;
+            }
+            input[type="text"],
+            textarea {
+                width: 100%;
+                padding: 10px;
+                margin-top: 5px;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                box-sizing: border-box;
+                font-size: 14px;
+                transition: border-color 0.3s;
+            }
+            input[type="text"]:focus,
+            textarea:focus {
+                border-color: #66afe9;
+                outline: none;
+            }
+            .autocomplete-wrapper {
+                position: relative;
+            }
+            .suggestions {
+                position: absolute;
+                background-color: #ffffff;
+                border: 1px solid #cccccc;
+                border-top: none;
+                z-index: 1000;
+                max-height: 150px;
+                overflow-y: auto;
+                width: 100%;
+                box-sizing: border-box;
+                border-radius: 0 0 4px 4px;
+            }
+            .suggestion-item {
+                padding: 10px;
+                cursor: pointer;
+                font-size: 14px;
+                color: #333333;
+            }
+            .suggestion-item:hover,
+            .suggestion-item.active {
+                background-color: #f0f0f0;
+            }
+            .checkbox-group {
+                display: flex;
+                align-items: center;
+                margin-top: 15px;
+            }
+            .checkbox-group input {
+                width: auto;
+                margin-right: 10px;
+            }
+            button {
+                padding: 10px 20px;
+                margin-top: 20px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: background-color 0.3s;
+            }
+            button[type="submit"] {
+                background-color: #28a745;
+                color: #ffffff;
+                margin-right: 10px;
+            }
+            button[type="submit"]:hover {
+                background-color: #218838;
+            }
+            button[type="button"] {
+                background-color: #dc3545;
+                color: #ffffff;
+            }
+            button[type="button"]:hover {
+                background-color: #c82333;
+            }
+            .checkbox-label {
+                margin-top: 0px;
+            }
+        </style>
+    </head>
+    <body>
+        <form id="mrForm">
+            <label for="branch">源分支:</label>
+            <input type="text" id="branch" name="branch" value="${currentBranch}" required readonly>
+
+            <label for="targetBranch">目标分支:</label>
+            <div class="autocomplete-wrapper">
+                <input type="text" id="targetBranch" name="targetBranch" value="${lastTargetBranch}" required placeholder="选择或输入目标分支" autocomplete="off">
+                <div id="suggestions" class="suggestions" style="display: none;"></div>
+            </div>
+
+            <label for="mrTitle">MR 标题:</label>
+            <input type="text" id="mrTitle" name="mrTitle" value="${lastCommitMessage}" required>
+
+            <label for="description">描述:</label>
+            <textarea id="description" name="description" rows="4" placeholder="填写MR的描述..."></textarea>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="deleteSourceBranch" name="deleteSourceBranch" ${removeSourceBranch ? 'checked' : ''}>
+                <label class="checkbox-label" for="deleteSourceBranch">是否删除源分支</label>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="squashCommits" name="squashCommits">
+                <label class="checkbox-label" for="squashCommits">是否压缩提交</label>
+            </div>
+
+            <button type="submit">提交</button>
+            <button type="button" onclick="cancel()">取消</button>
+        </form>
+
+        <script>
+            const vscode = acquireVsCodeApi();
+            const branches = ${JSON.stringify(branches)};
+
+            const targetBranchInput = document.getElementById('targetBranch');
+            const suggestionsBox = document.getElementById('suggestions');
+            let currentFocus = -1;
+
+            // 简单的模糊匹配函数
+            const fuzzyMatch = (query, branch) => {
+                query = query.toLowerCase();
+                branch = branch.toLowerCase();
+                let qIndex = 0;
+                for (let i = 0; i < branch.length; i++) {
+                    if (branch[i] === query[qIndex]) {
+                        qIndex++;
+                    }
+                    if (qIndex === query.length) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            targetBranchInput.addEventListener('input', function() {
+                const query = this.value.trim().toLowerCase();
+                suggestionsBox.innerHTML = '';
+                currentFocus = -1;
+                if (query.length === 0) {
+                    suggestionsBox.style.display = 'none';
+                    return;
+                }
+                const filteredBranches = branches.filter(branch => fuzzyMatch(query, branch));
+                if (filteredBranches.length === 0) {
+                    suggestionsBox.style.display = 'none';
+                    return;
+                }
+                filteredBranches.forEach(branch => {
+                    const div = document.createElement('div');
+                    div.className = 'suggestion-item';
+                    div.textContent = branch;
+                    div.addEventListener('click', () => {
+                        targetBranchInput.value = branch;
+                        suggestionsBox.style.display = 'none';
+                    });
+                    suggestionsBox.appendChild(div);
+                });
+                suggestionsBox.style.display = 'block';
+            });
+
+            // 键盘导航
+            targetBranchInput.addEventListener('keydown', function(e) {
+                const items = suggestionsBox.getElementsByClassName('suggestion-item');
+                if (e.key === 'ArrowDown') {
+                    currentFocus++;
+                    addActive(items);
+                    e.preventDefault();
+                } else if (e.key === 'ArrowUp') {
+                    currentFocus--;
+                    addActive(items);
+                    e.preventDefault();
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (currentFocus > -1) {
+                        if (items) items[currentFocus].click();
+                    }
+                }
+            });
+
+            function addActive(items) {
+                if (!items) return false;
+                removeActive(items);
+                if (currentFocus >= items.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = items.length - 1;
+                items[currentFocus].classList.add('active');
+                // 确保当前选中的项在视野内
+                items[currentFocus].scrollIntoView({ block: 'nearest' });
+            }
+
+            function removeActive(items) {
+                for (let i = 0; i < items.length; i++) {
+                    items[i].classList.remove('active');
+                }
+            }
+
+            // 点击页面其他地方隐藏建议列表
+            document.addEventListener('click', function(event) {
+                if (!targetBranchInput.contains(event.target) && !suggestionsBox.contains(event.target)) {
+                    suggestionsBox.style.display = 'none';
+                }
+            });
+
+            document.getElementById('mrForm').addEventListener('submit', event => {
+                event.preventDefault();
+                const branch = document.getElementById('branch').value.trim();
+                const targetBranch = document.getElementById('targetBranch').value.trim();
+                const mrTitle = document.getElementById('mrTitle').value.trim();
+                const description = document.getElementById('description').value.trim();
+                const deleteSourceBranch = document.getElementById('deleteSourceBranch').checked;
+                const squashCommits = document.getElementById('squashCommits').checked;
+                vscode.postMessage({
+                    command: 'submit',
+                    branch,
+                    targetBranch,
+                    mrTitle,
+                    description,
+                    deleteSourceBranch,
+                    squashCommits
+                });
+            });
+
+            function cancel() {
+                vscode.postMessage({ command: 'cancel' });
+            }
+        </script>
+    </body>
+    </html>`;
+};
+
+// 修改 openMR 函数以接受新的参数
+const openMR = async (branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits) => {
     const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
 
     const targetRemote = preferences.get('targetRemote', 'origin');
     const autoCommitChanges = preferences.get('autoCommitChanges', false);
     const autoOpenMr = preferences.get('autoOpenMr', false);
     const openToEdit = preferences.get('openToEdit', false);
-    const removeSourceBranch = preferences.get('removeSourceBranch', false);
-
-    // 获取并设置默认分支
-    let targetBranch = preferences.get('targetBranch', 'master');
+    
     // Pick workspace
     const workspaceFolder = await selectWorkspaceFolder();
     if (!workspaceFolder) {
@@ -115,65 +430,23 @@ const openMR = async () => {
 
     const gitlab = await buildGitlabContext(workspaceFolderPath);
 
-    const currentBranch = await git.getCurrentBranch();
-
-    // Prompt user for branch and commit message
-    const branch = await vscode.window.showInputBox({
-        prompt: 'Input origin branch Name:',
-        value: currentBranch,
-        ignoreFocusOut: true
-    }).then(branch => branch.trim());
-
     // Validate branch name
     if (branch === '') {
         return showErrorMessage('Branch name must be provided.');
-    }
-
-    if (!branch) {
-        return;
     }
 
     if (branch.indexOf(' ') > -1) {
         return showErrorMessage('Branch name must not contain spaces.');
     }
 
-    const {onMaster,cleanBranch} = await git.checkStatus(branch);
+    const { onMaster, cleanBranch } = await git.checkStatus(branch);
 
-    const useDefaultBranch = preferences.get('useDefaultBranch', false);
-
-    if (useDefaultBranch) {
-        targetBranch = await gitlab.getRepo().then(repo => repo.default_branch);
-    } else {
-        const branchSummary = await git.listBranches(targetRemote);
-        const branchOptions = Object.keys(branchSummary.branches).map(branch => ({
-            label: branchSummary.branches[branch].name,
-            description: `远程分支: ${branchSummary.branches[branch].name}`
-        }));
-
-        const selectedBranch = await vscode.window.showQuickPick([
-            { label: targetBranch, description: 'last use' },
-            ...branchOptions
-        ], {
-            placeHolder: '选择或输入目标分支名称:',
-            value: targetBranch,
-            matchOnDescription: true,
-            ignoreFocusOut: true
-        });
-
-        if (!selectedBranch) {
-            return showErrorMessage('必须提供目标分支名称。');
-        }
-
-        targetBranch = selectedBranch.label;
-    }
     if (branch === targetBranch) {
         return showErrorMessage(`Target branch name cannot be same with origin branch (${targetBranch}).`);
     }
 
-    const lastCommitMessage = await git.lastCommitMessage();
-
     const buildStatus = vscode.window.setStatusBarMessage(message(`Building MR to ${targetBranch} from ${branch}...`));
-
+    
     // If the branch is not clean, and autoCommitChanges is false,
     // prompt user if they want to commit changes.
     // Otherwise, commit changes.
@@ -189,22 +462,6 @@ const openMR = async () => {
     ) : true;
 
     if (commitChanges === undefined) {
-        return;
-    }
-
-    // Prompt for commit message/mr title
-    const mrTitle = await vscode.window.showInputBox({
-        prompt: commitChanges ? 'Commit message / MR Title:' : 'MR Title:',
-        value:  lastCommitMessage,
-        ignoreFocusOut: true
-    });
-
-    // Validate commit message
-    if (mrTitle === '') {
-        return showErrorMessage('MR title must be provided.');
-    }
-
-    if (!mrTitle) {
         return;
     }
 
@@ -233,22 +490,21 @@ const openMR = async () => {
     await gitPromises
         .catch(err => {
             buildStatus.dispose();
-
             throw err;
         });
 
-    return gitlab.openMr(branch, targetBranch, mrTitle, removeSourceBranch)
+    return gitlab.openMr(branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits)
         .then(mr => {
             // 更新配置中的 targetBranch
             preferences.update('targetBranch', targetBranch, vscode.ConfigurationTarget.Global);
 
-            const successMessage = message(`MR !${mr.iid} created.`);
-            const successButton = 'Open MR';
+            const successMessage = message(`MR !${mr.iid} 创建成功。`);
+            const successButton = '打开 MR';
 
             buildStatus.dispose();
             vscode.window.setStatusBarMessage(successMessage, STATUS_TIMEOUT);
 
-            const mrWebUrl = `${mr.web_url}${openToEdit ? '/edit': ''}`;
+            const mrWebUrl = `${mr.web_url}${openToEdit ? '/edit' : ''}`;
 
             if (autoOpenMr) {
                 vscode.env.openExternal(vscode.Uri.parse(mrWebUrl));
@@ -518,6 +774,6 @@ module.exports = {
     listMRs: () => listMRs().catch(e => showErrorMessage(e.message)),
     viewMR: () => viewMR().catch(e => showErrorMessage(e.message)),
     checkoutMR: () => checkoutMR().catch(e => showErrorMessage(e.message)),
-    openMR: () => openMR().catch(e => showErrorMessage(e.message)),
+    openMR: showCreateMRForm,
     editMR: () => editMR().catch(e => showErrorMessage(e.message))
 };
