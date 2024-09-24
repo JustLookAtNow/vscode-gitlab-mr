@@ -111,7 +111,7 @@ const showCreateMRForm = async () => {
     const branchSummary = await git.listBranches(targetRemote);
     const branches = Object.keys(branchSummary.branches).map(branch => branchSummary.branches[branch].name);
 
-    // 获取当前分支名称
+    // 获取前分支名称
     const currentBranch = await git.getCurrentBranch();
 
     // 获取上次使用的目标分支
@@ -207,7 +207,8 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
     <html lang="zh">
     <head>
         <meta charset="UTF-8">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
+        <!-- 更新 Content Security Policy，允许加载 data URI 的图像 -->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:;">
         <title>创建 Merge Request</title>
         <style>
             body {
@@ -260,12 +261,16 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 width: 100%;
                 box-sizing: border-box;
                 border-radius: 0 0 4px 4px;
+                /* 修改下拉框的高度和样式 */
+                min-height: 30px;
             }
             .suggestion-item {
                 padding: 10px;
                 cursor: pointer;
                 font-size: 14px;
                 color: #333333;
+                /* 添加鼠标悬停效果 */
+                transition: background-color 0.2s;
             }
             .suggestion-item:hover,
             .suggestion-item.active {
@@ -281,7 +286,7 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 margin-right: 10px;
             }
             button {
-                padding: 10px 20px;
+                padding: 6px 13px;
                 margin-top: 20px;
                 border: none;
                 border-radius: 4px;
@@ -310,47 +315,95 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
             .tag {
                 display: inline-block;
                 background-color: #e0e0e0;
-                border-radius: 4px;
-                padding: 2px 8px;
+                border-radius: 12px;
+                padding: 4px 8px;
                 margin: 2px;
+                font-size: 12px;
+                /* 修正标签高度和可点击性 */
+                line-height: 16px;
+                height: auto;
+                cursor: pointer;
             }
             .tag button {
                 background: none;
                 border: none;
                 cursor: pointer;
                 margin-left: 4px;
+                font-size: 12px;
+                padding: 0;
+                line-height: 12px;
             }
             .multi-select-wrapper {
                 position: relative;
+                display: flex;
+                align-items: center;
             }
-            select[multiple] {
-                width: 100%;
-                padding: 10px;
-                margin-top: 5px;
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                box-sizing: border-box;
-                font-size: 14px;
-                transition: border-color 0.3s;
-                height: 100px;
+            .custom-multi-select {
+                flex: 1;
+                position: relative;
             }
-            select[multiple]:focus {
-                border-color: #66afe9;
-                outline: none;
+            .option-item label {
+                margin-top: 0px;
             }
-            #refreshLabels {
-                position: absolute;
-                top: 10px;
-                right: 10px;
-                background-color: #007bff;
-                color: #ffffff;
-                border: none;
-                border-radius: 4px;
-                padding: 5px 10px;
+            .selected-options {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
                 cursor: pointer;
             }
-            #refreshLabels:hover {
-                background-color: #0056b3;
+
+            .selected-options .tag {
+                background-color: #e0e0e0;
+                border-radius: 12px;
+                padding: 4px 8px;
+                display: flex;
+                align-items: center;
+                font-size: 12px;
+            }
+
+            .selected-options .tag button {
+                background: none;
+                border: none;
+                margin-left: 5px;
+                cursor: pointer;
+                font-size: 12px;
+                margin-top: 0;
+            }
+            .option-item {
+                display: flex;
+                align-items: center;
+            }
+
+            /* 修复 #selectedLabels 的样式 */
+            #selectedLabels {
+                min-height: 30px; /* 设置最小高度以确保可见 */
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
+                padding: 5px; /* 增加内边距，使内容不紧贴边缘 */
+                border: 1px solid #cccccc; /* 添加边框以便更明显 */
+                border-radius: 4px; /* 圆角边框 */
+                background-color: #ffffff; /* 设置背景颜色 */
+                box-sizing: border-box; /* 包括内边距和边框在内的盒模型 */
+            }
+
+            /* 确保标签内部布局正确 */
+            #selectedLabels .tag {
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+            }
+            #refreshLabels {
+                margin-top: 0px;
+            }
+
+            /* 修改 .options-list 的样式，添加边框和淡紫色背景 */
+            .options-list {
+                border: 1px solid #ccc; /* 添加边框 */
+                background-color: #f9f0ff; /* 添加淡紫色背景 */
+            }
+            #selectedAssignees button {
+                margin-top: 0px;
             }
         </style>
     </head>
@@ -392,10 +445,18 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
 
             <label for="labels">标签:</label>
             <div class="multi-select-wrapper">
-                <select id="labels" name="labels" multiple>
-                    ${storedLabels.map(label => `<option value="${label}">${label}</option>`).join('')}
-                </select>
-                <button type="button" id="refreshLabels">刷新标签</button>
+                <div class="custom-multi-select">
+                    <div class="selected-options" id="selectedLabels">
+                        <!-- 已选择的标签将显示在这里 -->
+                    </div>
+                    <div class="options-list" id="labelOptions" style="display: none;">
+                        ${storedLabels.map(label => `<div class="option-item">
+                            <input type="checkbox" id="label-${label}" name="labels" value="${label}">
+                            <label for="label-${label}">${label}</label>
+                        </div>`).join('')}
+                    </div>
+                </div>
+                <button type="button" id="refreshLabels" class="refresh-button">刷新</button>
             </div>
 
             <button type="submit">提交</button>
@@ -553,6 +614,7 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 }
             });
 
+            // 修复删除受让人的问题
             function renderSelectedAssignees() {
                 selectedAssigneesContainer.innerHTML = selectedAssignees.map(a => '<span class="tag">' + a.name + ' <button type="button" data-id="' + a.id + '">x</button></span>').join('');
                 attachAssigneeRemoveHandlers();
@@ -562,11 +624,70 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 document.querySelectorAll('#selectedAssignees button').forEach(button => {
                     button.addEventListener('click', () => {
                         const id = button.getAttribute('data-id');
-                        selectedAssignees = selectedAssignees.filter(a => a.id !== id);
+                        selectedAssignees = selectedAssignees.filter(a => a.id.toString() !== id); // 确保类型匹配
                         renderSelectedAssignees();
                     });
                 });
             }
+
+            // 处理标签选择
+            const selectedLabelsContainer = document.getElementById('selectedLabels');
+            const labelOptions = document.getElementById('labelOptions');
+
+            // 初始化已选择的标签
+            let selectedLabels = [];
+
+            function renderSelectedLabels() {
+                selectedLabelsContainer.innerHTML = selectedLabels.map(label => 
+                    '<span class="tag">' +
+                        label + ' <button type="button" data-value="' + label + '">x</button>' +
+                    '</span>'
+                ).join('');
+                attachLabelRemoveHandlers();
+            }
+
+            function attachLabelRemoveHandlers() {
+                selectedLabelsContainer.querySelectorAll('button').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const value = button.getAttribute('data-value');
+                        selectedLabels = selectedLabels.filter(label => label !== value);
+                        // 取消对应标签的勾选
+                        const checkbox = document.querySelector('input[name="labels"][value="' + value + '"]');
+                        if (checkbox) { checkbox.checked = false; }
+                        updateLabels();
+                    });
+                });
+            }
+
+            function updateLabels() {
+                // 更新已选择的标签显示
+                renderSelectedLabels();
+                // 更新隐藏的输入或发送消息
+                // 这里可以根据需要进行处理，例如保存到隐藏字段或发送到后端
+            }
+
+            // 显示或隐藏标签选项列表
+            selectedLabelsContainer.addEventListener('click', () => {
+                labelOptions.style.display = labelOptions.style.display === 'none' ? 'block' : 'none';
+            });
+
+            // 处理标签选中
+            labelOptions.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const value = this.value;
+                    if (this.checked) {
+                        if (!selectedLabels.includes(value)) {
+                            selectedLabels.push(value);
+                        }
+                    } else {
+                        selectedLabels = selectedLabels.filter(label => label !== value);
+                    }
+                    updateLabels();
+                });
+            });
+
+            // 初始化显示已选择的标签
+            renderSelectedLabels();
 
             // 处理标签刷新
             document.getElementById('refreshLabels').addEventListener('click', () => {
@@ -582,7 +703,7 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 const deleteSourceBranch = document.getElementById('deleteSourceBranch').checked;
                 const squashCommits = document.getElementById('squashCommits').checked;
                 const assigneeIds = selectedAssignees.map(a => a.id);
-                const labels = Array.from(document.getElementById('labels').selectedOptions).map(option => option.value);
+                const labels = selectedLabels;
                 vscode.postMessage({
                     command: 'submit',
                     branch,
@@ -602,6 +723,14 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
 
             // 初始化选中的受让人
             renderSelectedAssignees();
+
+            // 添加点击事件处理 .option-item 的选中和取消选中
+            document.querySelectorAll('.option-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const checkbox = item.querySelector('input[type="checkbox"]');
+                    checkbox.checked = !checkbox.checked;
+                });
+            });
         </script>
     </body>
     </html>`;
