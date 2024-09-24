@@ -123,6 +123,11 @@ const showCreateMRForm = async () => {
     // 获取删除源分支的配置
     const removeSourceBranch = preferences.get('removeSourceBranch', false);
 
+    // 获取上次使用的受让人
+    const lastAssignees = preferences.get('lastAssignees', []);
+
+    // 获取存储的标签
+    const storedLabels = preferences.get('projectLabels', []);
 
     const panel = vscode.window.createWebviewPanel(
         'createMR', // 视图类型
@@ -133,16 +138,22 @@ const showCreateMRForm = async () => {
         }
     );
 
-    // 设置 Webview 的 HTML 内容，并传递分支列表、当前分支和最后一次提交信息
-    panel.webview.html = getWebviewContent(branches, currentBranch, lastTargetBranch, lastCommitMessage, removeSourceBranch);
+    // 设置 Webview 的 HTML 内容，并传递分支列表、当前分支、最后一次提交信息、默认 assignees 和 labels
+    panel.webview.html = getWebviewContent(branches, currentBranch, lastTargetBranch, lastCommitMessage, removeSourceBranch, lastAssignees, storedLabels);
 
-    // 处理来自 Webview 的消息，移除 context.subscriptions
+    // 处理来自 Webview 的消息
     panel.webview.onDidReceiveMessage(async message => {
         switch (message.command) {
             case 'submit':
-                const { branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits } = message;
-                await openMR(branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits);
+                const { branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits, assigneeIds, labels } = message;
+                await openMR(branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits, assigneeIds, labels);
                 panel.dispose();
+                break;
+            case 'fetchAssignees':
+                await handleFetchAssignees(message.query, panel);
+                break;
+            case 'refreshLabels':
+                await handleRefreshLabels(panel);
                 break;
             case 'cancel':
                 panel.dispose();
@@ -151,12 +162,52 @@ const showCreateMRForm = async () => {
     });
 };
 
+// 添加处理 fetchAssignees 消息的函数
+const handleFetchAssignees = async (query, panel) => {
+    const workspaceFolder = await selectWorkspaceFolder();
+    if (!workspaceFolder) {
+        return;
+    }
+
+    const workspaceFolderPath = workspaceFolder.uri.fsPath;
+    const gitlab = await buildGitlabContext(workspaceFolderPath);
+
+    try {
+        const users = await gitlab.searchUsers(query);
+        panel.webview.postMessage({ command: 'provideAssignees', assignees: users });
+    } catch (error) {
+        panel.webview.postMessage({ command: 'provideAssignees', assignees: [] });
+    }
+};
+
+// 添加处理 refreshLabels 消息的函数
+const handleRefreshLabels = async panel => {
+    const workspaceFolder = await selectWorkspaceFolder();
+    if (!workspaceFolder) {
+        return;
+    }
+
+    const workspaceFolderPath = workspaceFolder.uri.fsPath;
+    const gitlab = await buildGitlabContext(workspaceFolderPath);
+
+    try {
+        const labels = await gitlab.listLabels();
+        // 存储标签到配置
+        await vscode.workspace.getConfiguration('gitlab-mr').update('projectLabels', labels, vscode.ConfigurationTarget.Workspace);
+        panel.webview.postMessage({ command: 'provideLabels', labels });
+    } catch (error) {
+        console.error('Error fetching labels:', error);
+        panel.webview.postMessage({ command: 'provideLabels', labels: [] });
+    }
+};
+
 // 修改获取 Webview 内容的函数，添加分支的下拉菜单和预填充MR标题
-const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommitMessage, removeSourceBranch) => {
+const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommitMessage, removeSourceBranch, lastAssignees = [], storedLabels = []) => {
     return `<!DOCTYPE html>
     <html lang="zh">
     <head>
         <meta charset="UTF-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
         <title>创建 Merge Request</title>
         <style>
             body {
@@ -256,6 +307,51 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
             .checkbox-label {
                 margin-top: 0px;
             }
+            .tag {
+                display: inline-block;
+                background-color: #e0e0e0;
+                border-radius: 4px;
+                padding: 2px 8px;
+                margin: 2px;
+            }
+            .tag button {
+                background: none;
+                border: none;
+                cursor: pointer;
+                margin-left: 4px;
+            }
+            .multi-select-wrapper {
+                position: relative;
+            }
+            select[multiple] {
+                width: 100%;
+                padding: 10px;
+                margin-top: 5px;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                box-sizing: border-box;
+                font-size: 14px;
+                transition: border-color 0.3s;
+                height: 100px;
+            }
+            select[multiple]:focus {
+                border-color: #66afe9;
+                outline: none;
+            }
+            #refreshLabels {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background-color: #007bff;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 10px;
+                cursor: pointer;
+            }
+            #refreshLabels:hover {
+                background-color: #0056b3;
+            }
         </style>
     </head>
     <body>
@@ -285,6 +381,23 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 <label class="checkbox-label" for="squashCommits">是否压缩提交</label>
             </div>
 
+            <label for="assignees">受让人:</label>
+            <div class="autocomplete-wrapper">
+                <input type="text" id="assignees" name="assignees" placeholder="输入用户名并选择" autocomplete="off">
+                <div id="assigneeSuggestions" class="suggestions" style="display: none;"></div>
+            </div>
+            <div id="selectedAssignees">
+                ${lastAssignees.map(assignee => `<span class="tag">${assignee.name} <button type="button" data-id="${assignee.id}">x</button></span>`).join('')}
+            </div>
+
+            <label for="labels">标签:</label>
+            <div class="multi-select-wrapper">
+                <select id="labels" name="labels" multiple>
+                    ${storedLabels.map(label => `<option value="${label}">${label}</option>`).join('')}
+                </select>
+                <button type="button" id="refreshLabels">刷新标签</button>
+            </div>
+
             <button type="submit">提交</button>
             <button type="button" onclick="cancel()">取消</button>
         </form>
@@ -292,6 +405,8 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
         <script>
             const vscode = acquireVsCodeApi();
             const branches = ${JSON.stringify(branches)};
+            const assignees = ${JSON.stringify(lastAssignees)};
+            const labels = ${JSON.stringify(storedLabels)};
 
             const targetBranchInput = document.getElementById('targetBranch');
             const suggestionsBox = document.getElementById('suggestions');
@@ -381,6 +496,83 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 }
             });
 
+            // 处理受让人输入和选择
+            const assigneeInput = document.getElementById('assignees');
+            const assigneeSuggestions = document.getElementById('assigneeSuggestions');
+            const selectedAssigneesContainer = document.getElementById('selectedAssignees');
+            let selectedAssignees = ${JSON.stringify(lastAssignees)};
+
+            // 防止 Enter 键提交表单
+            assigneeInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                }
+            });
+
+            // 添加防抖功能
+            let debounceTimer;
+            assigneeInput.addEventListener('input', function() {
+                const query = this.value.trim().toLowerCase();
+                assigneeSuggestions.innerHTML = '';
+                if (query.length === 0) {
+                    assigneeSuggestions.style.display = 'none';
+                    return;
+                }
+
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    // 发送消息请求匹配用户
+                    vscode.postMessage({ command: 'fetchAssignees', query });
+                }, 500); // 延迟 0.5 秒
+            });
+
+            window.addEventListener('message', event => {
+                const message = event.data;
+                if (message.command === 'provideAssignees') {
+                    assigneeSuggestions.innerHTML = '';
+                    if (message.assignees.length === 0) {
+                        assigneeSuggestions.style.display = 'none';
+                        return;
+                    }
+                    message.assignees.forEach(assignee => {
+                        const div = document.createElement('div');
+                        div.className = 'suggestion-item';
+                        div.textContent = assignee.name + '(@' + assignee.username + ')';
+                        div.addEventListener('click', () => {
+                            selectedAssignees.push(assignee);
+                            renderSelectedAssignees();
+                            assigneeInput.value = '';
+                            assigneeSuggestions.style.display = 'none';
+                        });
+                        assigneeSuggestions.appendChild(div);
+                    });
+                    assigneeSuggestions.style.display = 'block';
+                } else if (message.command === 'provideLabels') {
+                    const labelsSelect = document.getElementById('labels');
+                    labelsSelect.innerHTML = message.labels.map(label => '<option value="' + label + '">' + label + '</option>').join('');
+                }
+            });
+
+            function renderSelectedAssignees() {
+                selectedAssigneesContainer.innerHTML = selectedAssignees.map(a => '<span class="tag">' + a.name + ' <button type="button" data-id="' + a.id + '">x</button></span>').join('');
+                attachAssigneeRemoveHandlers();
+            }
+
+            function attachAssigneeRemoveHandlers() {
+                document.querySelectorAll('#selectedAssignees button').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const id = button.getAttribute('data-id');
+                        selectedAssignees = selectedAssignees.filter(a => a.id !== id);
+                        renderSelectedAssignees();
+                    });
+                });
+            }
+
+            // 处理标签刷新
+            document.getElementById('refreshLabels').addEventListener('click', () => {
+                vscode.postMessage({ command: 'refreshLabels' });
+            });
+
             document.getElementById('mrForm').addEventListener('submit', event => {
                 event.preventDefault();
                 const branch = document.getElementById('branch').value.trim();
@@ -389,6 +581,8 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 const description = document.getElementById('description').value.trim();
                 const deleteSourceBranch = document.getElementById('deleteSourceBranch').checked;
                 const squashCommits = document.getElementById('squashCommits').checked;
+                const assigneeIds = selectedAssignees.map(a => a.id);
+                const labels = Array.from(document.getElementById('labels').selectedOptions).map(option => option.value);
                 vscode.postMessage({
                     command: 'submit',
                     branch,
@@ -396,20 +590,25 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                     mrTitle,
                     description,
                     deleteSourceBranch,
-                    squashCommits
+                    squashCommits,
+                    assigneeIds,
+                    labels
                 });
             });
 
             function cancel() {
                 vscode.postMessage({ command: 'cancel' });
             }
+
+            // 初始化选中的受让人
+            renderSelectedAssignees();
         </script>
     </body>
     </html>`;
 };
 
-// 修改 openMR 函数以接受新的参数
-const openMR = async (branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits) => {
+// 修改 openMR 函数以处理 new parameters: assigneeIds 和 labels
+const openMR = async (branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits, assigneeIds, labels) => {
     const preferences = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
 
     const targetRemote = preferences.get('targetRemote', 'origin');
@@ -493,10 +692,10 @@ const openMR = async (branch, targetBranch, mrTitle, description, deleteSourceBr
             throw err;
         });
 
-    return gitlab.openMr(branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits)
+    return gitlab.openMr(branch, targetBranch, mrTitle, description, deleteSourceBranch, squashCommits, assigneeIds, labels)
         .then(mr => {
             // 更新配置中的 targetBranch
-            preferences.update('targetBranch', targetBranch, vscode.ConfigurationTarget.Global);
+            preferences.update('targetBranch', targetBranch, vscode.ConfigurationTarget.Workspace);
 
             const successMessage = message(`MR !${mr.iid} 创建成功。`);
             const successButton = '打开 MR';

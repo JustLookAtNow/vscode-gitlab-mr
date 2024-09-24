@@ -1,7 +1,7 @@
 const vscode = require('vscode');
 const workflows = require('./workflows');
 
-exports.activate = context => {
+function activate(context) {
     const openMR = vscode.commands.registerCommand('extension.openMR', workflows.openMR);
     const viewMR = vscode.commands.registerCommand('extension.viewMR', workflows.viewMR);
     const checkoutMR = vscode.commands.registerCommand('extension.checkoutMR', workflows.checkoutMR);
@@ -11,6 +11,11 @@ exports.activate = context => {
     context.subscriptions.push(viewMR);
     context.subscriptions.push(checkoutMR);
     context.subscriptions.push(editMR);
-};
+}
 
-exports.deactivate = () => {};
+function deactivate() {}
+
+module.exports = {
+    activate,
+    deactivate
+};

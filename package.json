@@ -16,7 +16,7 @@
         "onCommand:extension.checkoutMR",
         "onCommand:extension.editMR"
     ],
-    "main": "./dist/extension",
+    "main": "./src/extension",
     "contributes": {
         "commands": [
             {
@@ -108,6 +108,11 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Auto-commit current changes when creating an MR"
+                },
+                "gitlab-mr.projectLabels": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Stored labels for the project."
                 }
             }
         }
@@ -145,8 +150,7 @@
     "dependencies": {
         "lodash.trimstart": "^4.5.1",
         "opn": "^4.0.2",
-        "request": "^2.88.2",
-        "request-promise": "^4.2.2",
+        "axios": "^1.4.0",
         "simple-git": "^3.26.0",
         "ssh-parse": "^1.0.0"
     },
