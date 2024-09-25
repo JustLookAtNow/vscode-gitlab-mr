@@ -3,7 +3,10 @@
     "tasks": [
       {
         "label": "watch",
-        "dependsOn": ["npm: watch:tsc", "npm: watch:esbuild"],
+        "dependsOn": [
+          "npm: watch:tsc",
+          "npm: watch:esbuild"
+        ],
         "presentation": {
           "reveal": "never"
         },
@@ -35,6 +38,14 @@
           "group": "watch",
           "reveal": "never"
         }
+      },
+      {
+        "type": "npm",
+        "script": "compile",
+        "group": "build",
+        "problemMatcher": [],
+        "label": "npm: compile",
+        "detail": "npm run check-types && node esbuild.js"
       }
     ]
   }

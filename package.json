@@ -11,12 +11,8 @@
         "Other"
     ],
     "activationEvents": [
-        "onCommand:extension.openMR",
-        "onCommand:extension.viewMR",
-        "onCommand:extension.checkoutMR",
-        "onCommand:extension.editMR"
     ],
-    "main": "./src/extension",
+    "main": "./dist/extension",
     "contributes": {
         "commands": [
             {
