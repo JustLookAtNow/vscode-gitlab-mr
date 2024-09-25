@@ -130,7 +130,7 @@ const showCreateMRForm = async () => {
     const storedLabels = preferences.get('projectLabels', []);
 
     const panel = vscode.window.createWebviewPanel(
-        'createMR', // 视图类型
+        'createMR', // 视图型
         '创建 Merge Request', // 标题
         ViewColumn.One, // 显示在编辑器的哪个面板
         {
@@ -370,6 +370,7 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 margin-top: 0;
             }
             .option-item {
+                padding: 2px 0px;
                 display: flex;
                 align-items: center;
             }
@@ -397,10 +398,11 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 margin-top: 0px;
             }
 
-            /* 修改 .options-list 的样式，添加边框和淡紫色背景 */
+            /* 修改 .options-list 的样式，保持框和淡紫色背景 */
             .options-list {
                 border: 1px solid #ccc; /* 添加边框 */
                 background-color: #f9f0ff; /* 添加淡紫色背景 */
+                padding: 10px 3px;
             }
             #selectedAssignees button {
                 margin-top: 0px;
@@ -631,6 +633,29 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
             }
 
             // 处理标签选择
+            document.querySelector('.options-list').addEventListener('click', (event) => {
+                const optionItem = event.target.closest('.option-item');
+                if (!optionItem) return;
+
+                event.preventDefault(); // 阻止默认行为
+                event.stopPropagation(); // 阻止事件冒泡
+
+                const checkbox = optionItem.querySelector('input[type="checkbox"]');
+                if (!checkbox) return;
+
+                // 切换复选框状态
+                checkbox.checked = !checkbox.checked;
+
+                const labelValue = checkbox.value;
+                if (checkbox.checked) {
+                    selectedLabels.push(labelValue);
+                } else {
+                    selectedLabels = selectedLabels.filter(label => label !== labelValue);
+                }
+
+                renderSelectedLabels(); // 更新标签显示
+            });
+
             const selectedLabelsContainer = document.getElementById('selectedLabels');
             const labelOptions = document.getElementById('labelOptions');
 
@@ -671,21 +696,6 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
                 labelOptions.style.display = labelOptions.style.display === 'none' ? 'block' : 'none';
             });
 
-            // 处理标签选中
-            labelOptions.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-                checkbox.addEventListener('change', function() {
-                    const value = this.value;
-                    if (this.checked) {
-                        if (!selectedLabels.includes(value)) {
-                            selectedLabels.push(value);
-                        }
-                    } else {
-                        selectedLabels = selectedLabels.filter(label => label !== value);
-                    }
-                    updateLabels();
-                });
-            });
-
             // 初始化显示已选择的标签
             renderSelectedLabels();
 
@@ -723,14 +733,6 @@ const getWebviewContent = (branches, currentBranch, lastTargetBranch, lastCommit
 
             // 初始化选中的受让人
             renderSelectedAssignees();
-
-            // 添加点击事件处理 .option-item 的选中和取消选中
-            document.querySelectorAll('.option-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    const checkbox = item.querySelector('input[type="checkbox"]');
-                    checkbox.checked = !checkbox.checked;
-                });
-            });
         </script>
     </body>
     </html>`;
