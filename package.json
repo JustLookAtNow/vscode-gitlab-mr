@@ -1,0 +1,158 @@
+{
+    "name": "gitlab-mr",
+    "displayName": "Gitlab MR",
+    "description": "Manage MRs in Gitlab from VS Code",
+    "version": "1.4.3",
+    "publisher": "jasonn-porch",
+    "engines": {
+        "vscode": "^1.5.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+    ],
+    "main": "./dist/extension",
+    "contributes": {
+        "commands": [
+            {
+                "command": "extension.openMR",
+                "title": "Gitlab MR: Create MR"
+            },
+            {
+                "command": "extension.viewMR",
+                "title": "Gitlab MR: View MR"
+            },
+            {
+                "command": "extension.checkoutMR",
+                "title": "Gitlab MR: Checkout MR"
+            },
+            {
+                "command": "extension.editMR",
+                "title": "Gitlab MR: Edit MR"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "extension.openMR",
+                "key": "ctrl+k ctrl+m",
+                "mac": "cmd+k cmd+m",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "extension.viewMR",
+                "key": "ctrl+k ctrl+v",
+                "mac": "cmd+k cmd+v",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "extension.checkoutMR",
+                "key": "ctrl+k ctrl+b",
+                "mac": "cmd+k cmd+b",
+                "when": "editorTextFocus"
+            }
+        ],
+        "configuration": {
+            "title": "Gitlab MR",
+            "properties": {
+                "gitlab-mr.accessTokens": {
+                    "type": "object",
+                    "default": null,
+                    "description": "Key/value pairs of Gitlab Server URLs and Gitlab Access Tokens."
+                },
+                "gitlab-mr.accessToken": {
+                    "type": "string",
+                    "default": null,
+                    "description": "Gitlab Access Token for https://gitlab.com. Use gitlab-mr.accessTokens for CE/EE servers."
+                },
+                "gitlab-mr.targetBranch": {
+                    "type": "string",
+                    "default": "master",
+                    "description": "Target branch for MRs."
+                },
+                "gitlab-mr.targetRemote": {
+                    "type": "string",
+                    "default": "origin",
+                    "description": "Git remote to push to."
+                },
+                "gitlab-mr.autoOpenMr": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Open newly created MRs in your browser."
+                },
+                "gitlab-mr.removeSourceBranch": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When creating MRs, enable the option to remove the source branch after merging."
+                },
+                "gitlab-mr.useDefaultBranch": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When creating MRs, use default_branch set in repository as target branch."
+                },
+                "gitlab-mr.apiVersion": {
+                    "type": "string",
+                    "default": "v4",
+                    "description": "Gitlab API version, e.g. v4."
+                },
+                "gitlab-mr.openToEdit": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Open and edit newly created MRs in your browser."
+                },
+                "gitlab-mr.autoCommitChanges": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Auto-commit current changes when creating an MR"
+                },
+                "gitlab-mr.projectLabels": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Stored labels for the project."
+                }
+            }
+        }
+    },
+    "scripts": {
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "lint": "eslint .",
+        "test": "mocha",
+        "compile": "npm run check-types && node esbuild.js",
+        "check-types": "tsc --noEmit",
+        "watch": "npm-run-all -p watch:*",
+        "watch:esbuild": "node esbuild.js --watch",
+        "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+        "vscode:prepublish": "npm run package",
+        "package": "npm run check-types && node esbuild.js --production",
+        "package-old": "vsce package -o ./bin/vscode-gitlab-mr.vsix --baseContentUrl https://gitlab.com/jasonnutter/vscode-gitlab-mr/tree/master --baseImagesUrl https://gitlab.com/jasonnutter/vscode-gitlab-mr/raw/master"
+    },
+    "pre-commit": [
+        "compile",
+        "test"
+    ],
+    "devDependencies": {
+        "@types/chai": "^3.4.35",
+        "@types/mocha": "^2.2.39",
+        "@types/node": "^6.0.63",
+        "chai": "^3.5.0",
+        "esbuild": "^0.23.1",
+        "eslint": "^4.19.1",
+        "mocha": "^3.2.0",
+        "pre-commit": "^1.2.2",
+        "typescript": "^2.2.1",
+        "vscode": "^1.0.0",
+        "npm-run-all": "^4.1.5"
+    },
+    "dependencies": {
+        "lodash.trimstart": "^4.5.1",
+        "opn": "^4.0.2",
+        "axios": "^1.4.0",
+        "simple-git": "^3.26.0",
+        "ssh-parse": "^1.0.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://gitlab.com/jasonnutter/vscode-gitlab-mr"
+    },
+    "icon": "img/gitlab-logo.png"
+}

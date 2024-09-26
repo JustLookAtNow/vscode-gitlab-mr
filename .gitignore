@@ -1,0 +1,7 @@
+node_modules
+.npmrc
+npm-debug.log
+typings
+dist
+package-lock.json
+*.vsix
