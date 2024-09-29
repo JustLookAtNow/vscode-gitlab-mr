@@ -1,0 +1,27 @@
+
+name: Release
+on:
+  workflow_dispatch:
+  # release:
+  #   types: [prereleased, released]
+jobs:
+  release:
+    name: package plugins
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.0
+        with:
+          # Repository name with owner. For example, actions/checkout
+          repository: main
+          # The branch, tag or SHA to checkout. When checking out the repository that triggered a workflow, this defaults to the reference or SHA for that event.  Otherwise, uses the default branch.
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4.0.4
+        with:
+          # Version Spec of the version to use. Examples: 12.x, 10.15.1, >=10.15.0.
+          node-version: '20.x'
+      - name: Install Dependencies
+        run: |
+          npm install
+          npm i --save-dev esbuild
+          vsce package -o ./bin/vscode-gitlab-mr.vsix
