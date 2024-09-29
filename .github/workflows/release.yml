@@ -11,9 +11,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4.2.0
-        with:
+        #with:
           # Repository name with owner. For example, actions/checkout
-          repository: main
           # The branch, tag or SHA to checkout. When checking out the repository that triggered a workflow, this defaults to the reference or SHA for that event.  Otherwise, uses the default branch.
       - name: Setup Node.js environment
         uses: actions/setup-node@v4.0.4
